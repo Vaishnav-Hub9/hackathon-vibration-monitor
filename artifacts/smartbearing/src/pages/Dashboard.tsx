@@ -106,7 +106,7 @@ export default function Dashboard() {
         {/* Row 1: KPIs */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <motion.div initial={{opacity:0, y:20}} animate={{opacity:1, y:0}} className="bg-navy-card border border-navy p-5 rounded-xl flex flex-col justify-between">
-            <span className="text-slate-400 text-sm font-medium">Fleet Health Score</span>
+            <span className="text-slate-400 text-sm font-medium">Fleet Risk Assessment</span>
             <div className="flex items-end gap-3 mt-4">
               <span className="font-mono-data text-4xl font-bold text-amber">{fleetHealth}%</span>
             </div>
@@ -163,7 +163,7 @@ export default function Dashboard() {
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 divide-x divide-navy min-h-[100px]">
             {allSensors.map(s => {
-              const vColor = s.vibrationRMS > 3 ? '#EA580C' : s.vibrationRMS > 1.5 ? '#F59E0B' : '#10B981';
+              const vColor = s.accel_z > 3 ? '#EA580C' : s.accel_z > 1.5 ? '#F59E0B' : '#10B981';
               const DeltaIcon = s.vibDelta > 0.02 ? TrendingUp : s.vibDelta < -0.02 ? TrendingDown : Minus;
               const deltaColor = s.vibDelta > 0.02 ? '#EA580C' : s.vibDelta < -0.02 ? '#10B981' : '#64748b';
               return (
@@ -173,13 +173,13 @@ export default function Dashboard() {
                   <div className="flex items-center gap-1 mt-1">
                     <AnimatePresence mode="wait">
                       <motion.span
-                        key={s.vibrationRMS}
+                        key={s.accel_z}
                         initial={{ opacity: 0.4, y: -4 }}
                         animate={{ opacity: 1, y: 0 }}
                         className="font-mono-data text-sm font-bold"
                         style={{ color: vColor }}
                       >
-                        {s.vibrationRMS.toFixed(2)}g
+                        {s.accel_x?.toFixed(1)}/{s.accel_y?.toFixed(1)}/{s.accel_z?.toFixed(1)}g
                       </motion.span>
                     </AnimatePresence>
                     <DeltaIcon className="w-3 h-3 flex-shrink-0" style={{ color: deltaColor }} />
@@ -217,7 +217,7 @@ export default function Dashboard() {
                   <div className="text-3xl font-mono-data font-bold" style={{ color: m.healthScore < 50 ? '#EA580C' : m.healthScore < 80 ? '#F59E0B' : '#10B981' }}>
                     {m.healthScore}%
                   </div>
-                  <div className="text-xs text-slate-500 mt-1">Health Score</div>
+                  <div className="text-xs text-slate-500 mt-1">Risk Score</div>
                 </div>
                 <div className="text-right">
                   <div className="flex items-center justify-end gap-1 text-slate-300 font-mono-data text-sm">

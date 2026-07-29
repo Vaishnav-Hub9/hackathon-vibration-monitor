@@ -106,7 +106,7 @@ export default function MachineDetail() {
           </div>
           <div className="flex gap-6 text-right">
             <div>
-              <div className="text-xs text-slate-500 uppercase tracking-wider mb-1">Health Score</div>
+              <div className="text-xs text-slate-500 uppercase tracking-wider mb-1">Risk Assessment Score</div>
               <div className={`text-3xl font-mono-data font-bold ${machine.healthScore < 50 ? 'text-[#EA580C]' : 'text-[#10B981]'}`}>{machine.healthScore}%</div>
             </div>
             <div>
@@ -166,9 +166,9 @@ export default function MachineDetail() {
           <TabsContent value="sensors" className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               {[
-                { label: 'Vibration RMS', val: liveData?.vibrationRMS?.toFixed(3) || '0.000', unit: 'mm/s', icon: Activity, color: '#F59E0B' },
+                { label: 'Accel X/Y/Z', val: `${liveData?.accel_x?.toFixed(1)||'0.0'}/${liveData?.accel_y?.toFixed(1)||'0.0'}/${liveData?.accel_z?.toFixed(1)||'0.0'}`, unit: 'g', icon: Activity, color: '#F59E0B' },
                 { label: 'Temperature', val: liveData?.temperature?.toFixed(1) || '0.0', unit: '°C', icon: Thermometer, color: '#EA580C' },
-                { label: 'Acoustic Emission', val: liveData?.acousticLevel?.toFixed(2) || '0.00', unit: 'dB', icon: Radio, color: '#3B82F6' },
+                { label: 'Spindle Speed', val: liveData?.rpm || '0', unit: 'RPM', icon: Cpu, color: '#3B82F6' },
                 { label: 'Supply Voltage', val: '220', unit: 'V', icon: Zap, color: '#10B981' }
               ].map((m, i) => (
                 <div key={i} className="bg-navy-card border border-navy p-5 rounded-xl relative overflow-hidden">

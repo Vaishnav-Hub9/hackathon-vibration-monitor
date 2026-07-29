@@ -60,13 +60,16 @@ class SensorSimulator {
              healthScore = 90 + Math.random() * 10;
           }
           
-          const vibrationRMS = +(baseVibration + (Math.random() - 0.5) * 0.2).toFixed(3);
+          const accel_z = +(baseVibration + (Math.random() - 0.5) * 0.2).toFixed(3);
+          const accel_x = +(accel_z * 0.4 + (Math.random() - 0.5) * 0.1).toFixed(3);
+          const accel_y = +(accel_z * 0.6 + (Math.random() - 0.5) * 0.1).toFixed(3);
+          const rpm = Math.floor(15000 + (Math.random() - 0.5) * 50);
           const temperature = +(baseTemp + (Math.random() - 0.5) * 2).toFixed(1);
           
           // Generate 2048-point raw vibration signal to feed into ML model
           const signal = new Array(2048).fill(0);
           for (let s = 0; s < 2048; s++) {
-            signal[s] = Math.sin(s * 0.1) * vibrationRMS + (Math.random() - 0.5) * 0.1;
+            signal[s] = Math.sin(s * 0.1) * accel_z + (Math.random() - 0.5) * 0.1;
             if (machine.status === 'critical') {
                if (s % 100 < 5) signal[s] += 4.0 * (Math.random() + 0.5); 
             } else if (machine.status === 'warning') {
@@ -76,6 +79,7 @@ class SensorSimulator {
 
           let mlLabel = "Healthy";
           let mlConfidence = 0.99;
+          let technicianSummary = "";
           try {
              const res = await fetch("http://127.0.0.1:8000/predict", {
                  method: "POST",
@@ -87,6 +91,7 @@ class SensorSimulator {
                  if (mlData.label) {
                      mlLabel = mlData.label;
                      mlConfidence = mlData.confidence;
+                     technicianSummary = mlData.technician_summary || "";
                  }
              }
           } catch (e) {
@@ -111,7 +116,10 @@ class SensorSimulator {
           const reading = new SpindleReading({
             machineId: machine.machineId,
             spindleId,
-            vibrationRMS,
+            accel_x,
+            accel_y,
+            accel_z,
+            rpm,
             vibrationFFT,
             acousticRMS: +(0.3 + Math.random() * 0.2).toFixed(3),
             temperature,
@@ -139,7 +147,8 @@ class SensorSimulator {
                  spindleId,
                  severity,
                  type: severity.toUpperCase(),
-                 message: anomalyFlag ? `${mlLabel} detected with ${(mlConfidence*100).toFixed(1)}% confidence.` : 'Vibration RMS elevated. Monitor closely.'
+                 message: anomalyFlag ? `${mlLabel} detected with ${(mlConfidence*100).toFixed(1)}% confidence.` : 'Vibration elevated. Monitor closely.',
+                 technicianSummary
                });
                await newAlert.save();
                
@@ -152,6 +161,7 @@ class SensorSimulator {
                    machineName: machine.name,
                    type: severity.toUpperCase(),
                    message: newAlertObj.message,
+                   technicianSummary: newAlertObj.technicianSummary,
                    anomalyScore: bpfoScore,
                    timestamp: newAlertObj.detectedAt.toISOString().replace('T', ' ').substring(0, 19),
                    status: newAlertObj.status,
@@ -166,7 +176,10 @@ class SensorSimulator {
               machineId: machine.machineId,
               spindleId,
               healthScore: Math.round(finalHealthScore),
-              vibrationRMS,
+              accel_x,
+              accel_y,
+              accel_z,
+              rpm,
               temperature,
               bpfoScore,
               anomalyFlag,

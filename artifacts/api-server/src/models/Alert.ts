@@ -6,6 +6,7 @@ export interface IAlert extends Document {
   severity: 'critical' | 'warning' | 'info';
   type: string;
   message: string;
+  technicianSummary?: string;
   detectedAt: Date;
   acknowledgedAt?: Date;
   resolvedAt?: Date;
@@ -18,6 +19,7 @@ const AlertSchema: Schema = new Schema({
   severity: { type: String, enum: ['critical', 'warning', 'info'], required: true },
   type: { type: String, required: true },
   message: { type: String, required: true },
+  technicianSummary: { type: String },
   detectedAt: { type: Date, required: true, default: Date.now, index: true },
   acknowledgedAt: { type: Date },
   resolvedAt: { type: Date },

@@ -7,7 +7,10 @@ export type LiveSensor = {
   machineId: string;
   location: string;
   healthScore: number;
-  vibrationRMS: number;
+  accel_x: number;
+  accel_y: number;
+  accel_z: number;
+  rpm: number;
   temperature: number;
   anomalyScore: number;
   acousticLevel: number;
@@ -55,19 +58,22 @@ export function useLiveSensors(machineId?: string) {
     const handleSensorUpdate = (data: any) => {
       setSensors(prev => {
          const existingIdx = prev.findIndex(s => s.id === data.spindleId && s.machineId === data.machineId);
-         const status = data.anomalyFlag ? 'critical' : (data.vibrationRMS > 1.5 ? 'warning' : 'healthy');
+         const status = data.anomalyFlag ? 'critical' : (data.accel_z > 1.5 ? 'warning' : 'healthy');
          
          const newSensor: LiveSensor = {
             id: data.spindleId,
             machineId: data.machineId,
             location: data.spindleId,
             healthScore: data.healthScore,
-            vibrationRMS: data.vibrationRMS,
+            accel_x: data.accel_x,
+            accel_y: data.accel_y,
+            accel_z: data.accel_z,
+            rpm: data.rpm,
             temperature: data.temperature,
             anomalyScore: data.bpfoScore,
             acousticLevel: 0.3,
             status,
-            vibDelta: existingIdx >= 0 ? +(data.vibrationRMS - prev[existingIdx].vibrationRMS).toFixed(3) : 0,
+            vibDelta: existingIdx >= 0 ? +(data.accel_z - prev[existingIdx].accel_z).toFixed(3) : 0,
             tempDelta: existingIdx >= 0 ? +(data.temperature - prev[existingIdx].temperature).toFixed(1) : 0,
          };
          

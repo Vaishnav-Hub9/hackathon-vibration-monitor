@@ -19,6 +19,7 @@ type Alert = {
   machineName: string;
   type: string;
   message: string;
+  technicianSummary?: string;
   anomalyScore: number;
   timestamp: string;
   status: AlertStatus;
@@ -200,6 +201,14 @@ export default function Alerts() {
                         <span className="text-xs font-mono-data text-slate-500">{alert.timestamp}</span>
                       </div>
                       <p className="text-slate-300 text-sm leading-relaxed">{alert.message}</p>
+                      {alert.technicianSummary && (
+                        <div className="mt-3 p-3 bg-[#0A0E1A] border border-[#EA580C]/20 rounded-lg">
+                          <p className="text-[#EA580C] text-xs font-bold mb-1 flex items-center gap-1 uppercase tracking-wider">
+                            <span>🧠</span> AI Technician Assessment
+                          </p>
+                          <p className="text-slate-300 text-sm leading-relaxed">{alert.technicianSummary}</p>
+                        </div>
+                      )}
                       <div className="flex gap-4 mt-3 text-xs font-mono-data text-slate-500 flex-wrap">
                         <span>Node: {alert.nodeId}</span>
                         <span>Score: {alert.anomalyScore}</span>

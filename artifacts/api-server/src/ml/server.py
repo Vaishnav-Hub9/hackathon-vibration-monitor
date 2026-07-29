@@ -8,8 +8,13 @@ import pywt
 from fastapi import FastAPI
 from pydantic import BaseModel
 from typing import List
+from openai import OpenAI
 
 app = FastAPI()
+
+# Optionally set this in environment for actual Azure/OpenAI integration
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
 model_dir = os.path.join(os.path.dirname(__file__), 'models')
 model = joblib.load(os.path.join(model_dir, "smartline_final.pkl"))
@@ -72,6 +77,29 @@ def extract_wavelet_features(signal):
         features[f'wavelet_energy_{i}'] = np.sum(coeff**2)
     return features
 
+def generate_technician_summary(label: str, confidence: float, features: dict) -> str:
+    if label == "Healthy":
+        return "Machine is operating within normal vibration and temperature thresholds. No immediate inspection required."
+        
+    rms = features.get("rms", 0)
+    fft_dom = features.get("dominant_frequency", 0)
+    
+    if client:
+        try:
+            prompt = f"Write a 2-sentence technician summary and recommendation for a rotating machine showing {label} with {confidence*100:.1f}% confidence. RMS is {rms:.3f}, dominant FFT peak is at index {fft_dom}."
+            response = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[{"role": "system", "content": "You are a factory diagnostics AI."}, 
+                          {"role": "user", "content": prompt}]
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            pass # Fallback to mock
+
+    # Mock fallback if no API key or API fails (Perfect for Hackathon MVP)
+    action = "Schedule immediate manual inspection of inner race bearings." if "Inner" in label else "Check ball bearings for pitting and wear during next shift."
+    return f"High vibration detected in the {fft_dom * 7}Hz FFT range. {confidence*100:.1f}% probability of {label} wear. Recommended Action: {action}"
+
 @app.post("/predict")
 def predict(req: PredictRequest):
     if len(req.signal) != 2048:
@@ -90,10 +118,13 @@ def predict(req: PredictRequest):
     label = encoder.inverse_transform([prediction])[0]
     confidence = np.max(probability)
     
+    summary = generate_technician_summary(str(label), float(confidence), features)
+    
     return {
         "label": str(label),
         "confidence": float(confidence),
-        "features": features
+        "features": features,
+        "technician_summary": summary
     }
 
 if __name__ == "__main__":

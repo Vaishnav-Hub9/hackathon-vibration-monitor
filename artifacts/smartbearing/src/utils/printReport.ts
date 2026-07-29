@@ -89,7 +89,7 @@ export function generatePDFReport() {
 
   <h2>Machine Health Summary</h2>
   <table>
-    <thead><tr><th>ID</th><th>Machine</th><th>Status</th><th>Health Score</th><th>Spindles</th><th>Active Sensors</th><th>Last Alert</th></tr></thead>
+    <thead><tr><th>ID</th><th>Machine</th><th>Status</th><th>Risk Score</th><th>Spindles</th><th>Active Sensors</th><th>Last Alert</th></tr></thead>
     <tbody>${machineRows}</tbody>
   </table>
 

@@ -9,7 +9,10 @@ export interface ISpindleReading extends Document {
   machineId: string;
   spindleId: string;
   timestamp: Date;
-  vibrationRMS: number;
+  accel_x: number;
+  accel_y: number;
+  accel_z: number;
+  rpm: number;
   vibrationFFT: IFFTBin[];
   acousticRMS: number;
   temperature: number;
@@ -23,7 +26,10 @@ const SpindleReadingSchema: Schema = new Schema({
   machineId: { type: String, required: true, index: true },
   spindleId: { type: String, required: true, index: true },
   timestamp: { type: Date, required: true, default: Date.now, index: true },
-  vibrationRMS: { type: Number, required: true },
+  accel_x: { type: Number, required: true },
+  accel_y: { type: Number, required: true },
+  accel_z: { type: Number, required: true },
+  rpm: { type: Number, required: true },
   vibrationFFT: [{
     freq: { type: Number, required: true },
     amplitude: { type: Number, required: true }

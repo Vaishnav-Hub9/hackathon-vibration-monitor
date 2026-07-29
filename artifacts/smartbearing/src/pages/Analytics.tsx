@@ -205,7 +205,7 @@ export default function Analytics() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-navy">
-                  {['ID', 'Machine', 'Status', 'Health Score', 'Spindles', 'Sensors', 'Location'].map(h => (
+                  {['ID', 'Machine', 'Status', 'Risk Score', 'Spindles', 'Sensors', 'Location'].map(h => (
                     <th key={h} className="px-5 py-3 text-left text-xs text-slate-500 uppercase tracking-wider font-medium">{h}</th>
                   ))}
                 </tr>
