@@ -1,0 +1,43 @@
+# Render Blueprint — SmartBearing (hackathon-vibration-monitor)
+# Deploys BOTH the Node API server and the Python ML predictor.
+# Every push to `main` triggers an automatic redeploy of both services.
+#
+# To provision:  Render dashboard -> New -> Blueprint -> select this repo.
+# Required env var (set in Render dashboard after creation):
+#   MONGODB_URI  -> your MongoDB Atlas connection string (free tier works)
+
+services:
+  # ------------------------------------------------------------------
+  # 1) Node API server (Express + Socket.io + MongoDB)
+  # ------------------------------------------------------------------
+  - type: web
+    name: smartbearing-api
+    runtime: node
+    plan: free
+    rootDir: .
+    buildCommand: pnpm install --frozen-lockfile && pnpm --filter @workspace/api-server build
+    startCommand: pnpm --filter @workspace/api-server start
+    healthCheckPath: /api/healthz
+    envVars:
+      - key: PORT
+        value: 5000
+      - key: SIMULATOR_AUTO_START
+        value: "true"
+      - key: MONGODB_URI
+        sync: false
+      - key: ML_SERVER_URL
+        fromService:
+          type: web
+          name: smartbearing-ml
+          property: hostPort
+
+  # ------------------------------------------------------------------
+  # 2) Python ML prediction server (FastAPI + XGBoost model)
+  # ------------------------------------------------------------------
+  - type: web
+    name: smartbearing-ml
+    runtime: python
+    plan: free
+    rootDir: artifacts/api-server/src/ml
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT

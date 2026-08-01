@@ -80,8 +80,9 @@ class SensorSimulator {
           let mlLabel = "Healthy";
           let mlConfidence = 0.99;
           let technicianSummary = "";
+          const mlServerUrl = process.env.ML_SERVER_URL || 'http://127.0.0.1:8000';
           try {
-             const res = await fetch("http://127.0.0.1:8000/predict", {
+             const res = await fetch(`${mlServerUrl}/predict`, {
                  method: "POST",
                  headers: { "Content-Type": "application/json" },
                  body: JSON.stringify({ signal })

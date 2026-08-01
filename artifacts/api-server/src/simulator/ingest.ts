@@ -70,12 +70,13 @@ export async function processEdgeReading(
   const voltageNormalized = +(input.voltageNormalized ?? 220).toFixed(1);
 
   // ML prediction (same contract as the simulator)
+  const mlServerUrl = process.env.ML_SERVER_URL || 'http://127.0.0.1:8000';
   let mlLabel = 'Healthy';
   let mlConfidence = 0.99;
   let technicianSummary = '';
   let mlAvailable = false;
   try {
-    const res = await fetch('http://127.0.0.1:8000/predict', {
+    const res = await fetch(`${mlServerUrl}/predict`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ signal: input.signal }),
