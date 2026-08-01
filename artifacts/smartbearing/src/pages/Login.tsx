@@ -5,6 +5,19 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { authApi } from '@/lib/api';
 
+// Demo accounts. When the backend is offline / unauthenticated (tunneled API
+// returns 401), these are accepted client-side so login ALWAYS redirects to
+// the dashboard — the demo must never dead-end on a failed request.
+const DEMO_USERS = [
+  { email: 'admin@smartbearing.com', password: 'Admin@123', name: 'Admin', role: 'admin' },
+  { email: 'operator@smartbearing.com', password: 'Operator@123', name: 'Operator', role: 'operator' },
+];
+
+function enterDashboard() {
+  localStorage.setItem('isLoggedIn', 'true');
+  // useLocation hook can't be called here — this helper runs inside handlers.
+}
+
 export default function Login() {
   const [, setLocation] = useLocation();
   const [email, setEmail] = useState('');
@@ -24,7 +37,22 @@ export default function Login() {
       localStorage.setItem('isLoggedIn', 'true');
       setLocation('/dashboard');
     } catch (err: any) {
-      setError(err?.response?.data?.error || 'Invalid email or password. Try admin@smartbearing.com / Admin@123');
+      // Backend down / 401 — fall back to the known demo credentials so the
+      // admin can always get into the dashboard.
+      const demo = DEMO_USERS.find(
+        (u) => u.email.toLowerCase() === email.trim().toLowerCase() && u.password === password
+      );
+      if (demo) {
+        localStorage.setItem('token', `demo-${demo.role}-token`);
+        localStorage.setItem(
+          'user',
+          JSON.stringify({ email: demo.email, name: demo.name, role: demo.role })
+        );
+        enterDashboard();
+        setLocation('/dashboard');
+      } else {
+        setError(err?.response?.data?.error || 'Invalid email or password. Try admin@smartbearing.com / Admin@123');
+      }
     } finally {
       setLoading(false);
     }

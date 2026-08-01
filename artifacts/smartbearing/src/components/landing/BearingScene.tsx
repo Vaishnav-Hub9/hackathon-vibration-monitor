@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect, type RefObject } from 'react';
 import { Canvas, useFrame, type ThreeEvent } from '@react-three/fiber';
-import { OrbitControls, Html, ContactShadows, Environment, Lightformer, Sparkles, useCursor, Billboard } from '@react-three/drei';
+import { OrbitControls, Html, ContactShadows, Environment, Lightformer, useCursor, Billboard } from '@react-three/drei';
 import * as THREE from 'three';
 import type { LiveSensor } from '@/hooks/useLandingSensors';
 
@@ -12,6 +12,8 @@ export interface BearingSceneProps {
   showLabels: boolean;
   selected: SelectedPart;
   onSelect: (part: SelectedPart) => void;
+  /** Iron-Man mode: when set, the camera frames this exploded part ("Ball Element" = the ball plate). */
+  focusKey?: string | null;
 }
 
 export type SelectedPart = { name: string; sensor?: LiveSensor } | null;
@@ -47,6 +49,11 @@ const PART_POS: Record<string, [number, number, number]> = {
    instead of slicing into the rings. */
 const BALL_RADIUS = 0.2;
 const BALL_PITCH = 1.7;
+/* Fixed ball-train size. The socket feed ROTATES sensor ids every tick, so
+   geometry must never depend on sensor count/id — meshes are keyed by slot
+   index and placed with this constant, otherwise balls remount (z resets to
+   0) and the whole ring jumps on every feed update = the glitch. */
+const BALL_SLOTS = 8;
 const EXPLODED_POS: Record<string, [number, number, number]> = {
   'Outer Race': [0, 2.55, 1.9],
   'Inner Race': [0, -2.45, 1.7],
@@ -133,18 +140,20 @@ function PartLabel({ label, selected, onSelect }: { label: string; selected: boo
             />
             </mesh>
           ))}
-          {/* Pocket posts between the balls, locking them in the retainer */}
+          {/* Pocket posts between the balls, locking them in the retainer.
+              Same neutral steel as the rails at rest — no more red/amber
+              struts cluttering the exploded view. */}
           {Array.from({ length: 8 }, (_, i) => {
             const a = ((i + 0.5) / 8) * Math.PI * 2;
             return (
               <mesh key={i} castShadow position={[Math.cos(a) * BALL_PITCH, Math.sin(a) * BALL_PITCH, 0]}>
                 <boxGeometry args={[0.07, 0.07, 0.48]} />
                 <meshStandardMaterial
-                  color={hot ? '#FBBF24' : '#B45309'}
-                  metalness={0.6}
-                  roughness={0.35}
-                  emissive={hot ? '#F59E0B' : '#7C2D12'}
-                  emissiveIntensity={0.6}
+                  color={hot ? '#FBBF24' : '#9AA7BD'}
+                  metalness={0.85}
+                  roughness={0.3}
+                  emissive={hot ? '#F59E0B' : '#000000'}
+                  emissiveIntensity={hot ? 0.5 : 0}
                 />
               </mesh>
             );
@@ -209,9 +218,13 @@ function Balls({
   useFrame((_, delta) => {
     const g = ballsRef.current;
     if (!g) return;
-    // Ring spins (nearly frozen when exploded so each ball reads as its own plate)
-    const speed = (rpm / 15000) * 1.4 + 0.08;
-    g.rotation.z += speed * delta * 0.9 * (exploded ? 0.2 : 1);
+    // Ring spins ONLY when assembled — when exploded the train holds perfectly
+    // still. Continuous rotation at close camera range reads as glitchy
+    // zooming in/out, so the exploded view must be rock-solid static.
+    if (!exploded) {
+      const speed = (rpm / 15000) * 1.4 + 0.08;
+      g.rotation.z += speed * delta * 0.9;
+    }
     // Each ball flies to its own slot. When exploded, the whole ball train
     // lifts out as ONE clean ring in front of the assembly — a single radius
     // on a single z-plane — so it reads as a coherent suit-plate like the
@@ -223,12 +236,14 @@ function Balls({
     // 2.80 from origin → nearest 1.10), shaft (cylinder r 0.5 + ball 0.2 =
     // 0.7 < 1.06). The z=2.5 plate keeps the train visually in front of the
     // parts, which read as separate plates behind it.
-    const n = sensors.length || 1;
+    // Angle is a pure function of the SLOT INDEX with a fixed slot count —
+    // never sensors.length — so the ring geometry is rock-stable no matter
+    // how the live feed churns.
     meshRefs.current.forEach((m, i) => {
       if (!m) return;
       // Phase-shift the ring when exploded so no ball sits exactly on the
       // 45°/135° corner diagonals (keeps the corner chips clear of the ring)
-      const a = (i / n) * Math.PI * 2 + (exploded ? Math.PI / 8 : 0);
+      const a = (i / BALL_SLOTS) * Math.PI * 2 + (exploded ? Math.PI / 8 : 0);
       const targetR = BALL_PITCH;
       const targetZ = exploded ? 2.5 : 0;
       const r = THREE.MathUtils.damp(m.userData.r ?? BALL_PITCH, targetR, 6, delta);
@@ -243,12 +258,19 @@ function Balls({
 
   return (
     <group ref={ballsRef}>
-      {sensors.map((s, i) => {
+      {/* Key by SLOT INDEX ONLY — never by sensor id. The feed rotates ids
+          every tick; an id-keyed mesh unmounts/remounts, its z damp resets
+          to 0, and the ball visibly re-fly-ins = the glitch you kept seeing.
+          With index keys the meshes live forever and telemetry just updates
+          in place. */}
+      {Array.from({ length: BALL_SLOTS }, (_, i) => {
+        const s = sensors[i];
+        if (!s) return null;
         const active = hoverIdx === i || selectedId === s.id;
         const color = STATUS_COLOR[s.status] || STATUS_COLOR.healthy;
         return (
           <mesh
-            key={s.id}
+            key={i}
             ref={(m) => {
               meshRefs.current[i] = m;
             }}
@@ -310,15 +332,8 @@ function BearingRig(props: BearingSceneProps) {
   const innerRef = useRef<THREE.Group>(null);
   const cageRef = useRef<THREE.Group>(null);
   const shaftRef = useRef<THREE.Group>(null);
-  const wobbleRef = useRef<THREE.Group>(null);
 
-  useFrame((state, delta) => {
-    const t = state.clock.elapsedTime;
-    const factor = sensors.reduce((m, s) => Math.max(m, s.anomalyScore), 0);
-    if (wobbleRef.current) {
-      wobbleRef.current.rotation.x = Math.sin(t * 2.1) * 0.02 * (0.5 + factor);
-      wobbleRef.current.rotation.y = Math.sin(t * 1.3) * 0.015 * (0.5 + factor);
-    }
+  useFrame((_, delta) => {
     const refs: Record<string, RefObject<THREE.Group | null>> = { outer: outerRef, inner: innerRef, cage: cageRef, shaft: shaftRef };
     const keys: Record<string, string> = { outer: 'Outer Race', inner: 'Inner Race', cage: 'Cage', shaft: 'Shaft' };
     Object.entries(refs).forEach(([k, ref]) => {
@@ -348,7 +363,7 @@ function BearingRig(props: BearingSceneProps) {
 
   return (
     <>
-      <group ref={wobbleRef}>
+      <group>
         {/* Shaft */}
         <group ref={shaftRef}>
           <PartLabel label="Shaft" selected={selected?.name === 'Shaft'} onSelect={selectPart} />
@@ -398,31 +413,96 @@ function BearingRig(props: BearingSceneProps) {
   );
 }
 
+function CameraRig({
+  exploded,
+  focusKey,
+  controlsRef,
+}: {
+  exploded: boolean;
+  focusKey?: string | null;
+  controlsRef: RefObject<any>;
+}) {
+  const desired = useRef<{ pos: THREE.Vector3; target: THREE.Vector3 } | null>(null);
+  const settling = useRef(false);
+  const lastKey = useRef('');
+
+  const computeDesired = (c: any) => {
+    const cam = c.object;
+    if (exploded && focusKey) {
+      const p =
+        focusKey === 'Ball Element'
+          ? new THREE.Vector3(0, 0, 2.6)
+          : new THREE.Vector3(...(EXPLODED_POS[focusKey] ?? [0, 0, 1.6]));
+      // Sit along a diagonal from the part so the plate reads 3D, not flat.
+      const dir = p
+        .clone()
+        .normalize()
+        .add(new THREE.Vector3(0.55, 0.4, 0.35))
+        .normalize();
+      return { pos: p.clone().add(dir.multiplyScalar(5.6)), target: p.clone() };
+    }
+    const dist = exploded ? 16 : 7.6;
+    const dir = cam.position.clone().normalize();
+    return { pos: dir.multiplyScalar(dist), target: new THREE.Vector3(0, 0, exploded ? 0.6 : 0) };
+  };
+
+  // Re-arm the dolly whenever the focus state changes. OrbitControls mounts
+  // asynchronously inside Canvas, so retry until its ref is live.
+  useEffect(() => {
+    const key = `${exploded}|${focusKey ?? ''}`;
+    if (key === lastKey.current) return;
+    lastKey.current = key;
+    let raf = 0;
+    const arm = () => {
+      const c = controlsRef.current;
+      if (!c) {
+        raf = requestAnimationFrame(arm);
+        return;
+      }
+      desired.current = computeDesired(c);
+      settling.current = true;
+      // If the user grabs the camera mid-settle, hand over immediately —
+      // never fight their drag.
+      c.addEventListener?.('start', cancelSettle);
+    };
+    arm();
+    return () => {
+      cancelAnimationFrame(raf);
+      controlsRef.current?.removeEventListener?.('start', cancelSettle);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [exploded, focusKey]);
+
+  const cancelSettle = () => {
+    settling.current = false;
+    controlsRef.current?.removeEventListener?.('start', cancelSettle);
+  };
+
+  // Ease the camera toward the desired pose, then hand control back to
+  // OrbitControls for free orbit. This is a one-directional damp — it can
+  // never oscillate, so no zoom in/out glitching.
+  useFrame((_, delta) => {
+    const c = controlsRef.current;
+    if (!c || !settling.current || !desired.current) return;
+    const cam = c.object;
+    const d = desired.current;
+    const k = Math.min(1, delta * 6);
+    cam.position.lerp(d.pos, k);
+    c.target.lerp(d.target, k);
+    if (cam.position.distanceTo(d.pos) < 0.03 && c.target.distanceTo(d.target) < 0.03) {
+      cam.position.copy(d.pos);
+      c.target.copy(d.target);
+      cancelSettle();
+    }
+    c.update();
+  });
+
+  return null;
+}
+
 function Scene(props: BearingSceneProps) {
   const controlsRef = useRef<any>(null);
   const handlePointerMissed = () => props.onSelect(null);
-
-  // Pull the camera back & center on the assembly when exploding.
-  // Retries each frame until the OrbitControls ref is live (Canvas children
-  // mount asynchronously), then frames the exploded / assembled view once.
-  useEffect(() => {
-    let raf = 0;
-    const frame = () => {
-      const c = controlsRef.current;
-      if (!c) {
-        raf = requestAnimationFrame(frame);
-        return;
-      }
-      const dist = props.exploded ? 16 : 7.6;
-      const cam = c.object;
-      const dir = cam.position.clone().normalize();
-      cam.position.copy(dir.multiplyScalar(dist));
-      c.target.set(0, 0, props.exploded ? 0.6 : 0);
-      c.update();
-    };
-    frame();
-    return () => cancelAnimationFrame(raf);
-  }, [props.exploded]);
 
   return (
     <>
@@ -437,8 +517,8 @@ function Scene(props: BearingSceneProps) {
         <directionalLight position={[-6, -2, -4]} intensity={0.5} color="#3B82F6" />
         <pointLight position={[0, 0, 3.5]} intensity={2.4} color="#F59E0B" distance={9} />
         <BearingRig {...props} />
+        <CameraRig exploded={props.exploded} focusKey={props.focusKey} controlsRef={controlsRef} />
         <ContactShadows position={[0, -3.2, 0]} opacity={0.45} scale={16} blur={2.8} far={5} color="#000000" />
-        <Sparkles count={70} scale={[11, 7, 6]} size={1.6} speed={0.35} opacity={0.35} color="#F59E0B" />
         <Environment resolution={64} frames={1}>
           <Lightformer intensity={1.4} color="#F59E0B" position={[4, 3, 4]} scale={[5, 5, 1]} />
           <Lightformer intensity={0.8} color="#60A5FA" position={[-4, -2, 3]} scale={[5, 5, 1]} />
@@ -447,8 +527,8 @@ function Scene(props: BearingSceneProps) {
         <OrbitControls
           ref={controlsRef}
           enablePan={false}
-          enableDamping
-          dampingFactor={0.08}
+          // Damping OFF — the CameraRig eases the camera itself. Two dampers
+          // fighting the same camera is what produced the zoom glitching.
           minDistance={4.5}
           maxDistance={20}
           autoRotate={props.autoRotate}

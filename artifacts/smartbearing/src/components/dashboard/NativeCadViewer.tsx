@@ -75,7 +75,7 @@ const glowIntensity = (health: number) => (health < 40 ? 0.55 : health < 70 ? 0.
  * When `live` readings are supplied, each part's color heat-maps to its
  * health and the legend chips stream the current temperature / vibration.
  */
-export default function NativeCadViewer({ parts, live, autoRotate = true }: NativeCadViewerProps) {
+export default function NativeCadViewer({ parts, live, autoRotate = false }: NativeCadViewerProps) {
   const [hidden, setHidden] = useState<Set<string>>(new Set());
 
   const visible = parts.filter((p) => !hidden.has(p.url));
@@ -104,8 +104,11 @@ export default function NativeCadViewer({ parts, live, autoRotate = true }: Nati
           <directionalLight position={[6, 10, 6]} intensity={1.4} />
           <directionalLight position={[-6, -4, -6]} intensity={0.35} color="#3b82f6" />
           <Suspense fallback={null}>
+            {/* Fit ONCE on mount — `observe` refits the camera whenever the
+                bounding box recomputes, which made the model appear to
+                glitch/zoom in and out on live-data re-renders. */}
             {visible.length > 0 && (
-              <Bounds fit clip observe margin={1.25}>
+              <Bounds fit clip margin={1.25}>
                 {visible.map((p) => (
                   <PartMesh key={p.url} part={p} live={live?.[p.url]} />
                 ))}

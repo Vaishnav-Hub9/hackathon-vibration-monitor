@@ -7,11 +7,12 @@ import {
   BarChart3, 
   Settings as SettingsIcon,
   Menu,
-  Bell,
   LogOut,
+  LogIn,
   ChevronDown
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import NotificationBell from '@/components/layout/NotificationBell';
 
 interface DashLayoutProps {
   children: ReactNode;
@@ -21,6 +22,9 @@ export default function DashLayout({ children }: DashLayoutProps) {
   const [location, setLocation] = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [timeAgo, setTimeAgo] = useState(0);
+  const [loggedIn, setLoggedIn] = useState(
+    () => localStorage.getItem('isLoggedIn') === 'true'
+  );
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -30,8 +34,25 @@ export default function DashLayout({ children }: DashLayoutProps) {
   }, []);
 
   const handleLogout = () => {
+    // Real sign-out: drop the session (token + profile + app flag).
+    // Then HARD full-page navigate to the LANDING page (the 3D bearing hero
+    // at /). It is a public route, so it renders for anyone — and unlike
+    // wouter's SPA setLocation (a no-op when already on the same path), a
+    // full window.location navigation always produces a visible page change
+    // from ANY page, so Sign Out can never look 'dead'.
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
     localStorage.removeItem('isLoggedIn');
-    setLocation('/login');
+    setLoggedIn(false);
+    window.location.assign('/');
+  };
+
+  const handleAuthAction = () => {
+    if (loggedIn) {
+      handleLogout();
+    } else {
+      setLocation('/login');
+    }
   };
 
   const navItems = [
@@ -82,9 +103,12 @@ export default function DashLayout({ children }: DashLayoutProps) {
         </nav>
 
         <div className="absolute bottom-0 w-full p-4 border-t border-navy">
-          <button onClick={handleLogout} className="flex items-center gap-3 px-3 py-2 w-full text-slate-300 hover:text-white hover:bg-[#141E35] rounded-lg transition-colors">
-            <LogOut className="w-5 h-5" />
-            <span className="font-medium text-sm">Sign Out</span>
+          <button
+            onClick={handleAuthAction}
+            className={`flex items-center gap-3 px-3 py-2 w-full rounded-lg transition-colors ${loggedIn ? 'text-slate-300 hover:text-white hover:bg-[#141E35]' : 'text-amber hover:bg-amber/10'}`}
+          >
+            {loggedIn ? <LogOut className="w-5 h-5" /> : <LogIn className="w-5 h-5" />}
+            <span className="font-medium text-sm">{loggedIn ? 'Sign Out' : 'Sign In'}</span>
           </button>
         </div>
       </aside>
@@ -107,10 +131,7 @@ export default function DashLayout({ children }: DashLayoutProps) {
             <span className="text-xs text-slate-400 hidden sm:inline-block">
               Last updated: {timeAgo}s ago
             </span>
-            <div className="relative cursor-pointer text-slate-300 hover:text-amber transition-colors">
-              <Bell className="w-5 h-5" />
-              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-[#EA580C] rounded-full border-2 border-navy-card"></span>
-            </div>
+            <NotificationBell />
           </div>
         </header>
 

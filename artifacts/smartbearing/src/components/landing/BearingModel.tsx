@@ -1,5 +1,6 @@
 import { Component, type ReactNode, useState, lazy, Suspense, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Link } from 'wouter';
 import { RefreshCw, Rotate3d, Layers, Tag, Activity } from 'lucide-react';
 import { useLandingSensors } from '@/hooks/useLandingSensors';
 import type { LiveSensor } from '@/hooks/useLandingSensors';
@@ -54,31 +55,49 @@ class BearingErrorBoundary extends Component<{ children: ReactNode }, { hasError
   }
 }
 
-const PART_DETAILS: Record<string, { title: string; what: string; why: string }> = {
+export interface PartDetail {
+  title: string;
+  tagline: string;
+  what: string;
+  why: string;
+  fault: string;
+}
+
+export const PART_DETAILS: Record<string, PartDetail> = {
   'Outer Race': {
     title: 'Outer Race',
+    tagline: 'Static ring · BPFO fault zone',
     what: 'The static outer ring. Its raceway is the track the balls roll against, and it transfers the bearing load into the machine housing.',
     why: 'Outer-race defects produce the BPFO fault frequency — the single strongest predictor of imminent bearing failure.',
+    fault: 'BPFO spike ≈ 157 Hz — a red peak in the FFT spectrum flags spalling before seizure.',
   },
   'Inner Race': {
     title: 'Inner Race',
+    tagline: 'Rotating ring · BPFI fault zone',
     what: 'The rotating inner ring, press-fit onto the shaft. It spins at shaft speed and drives the ball train around the raceway.',
     why: 'Tracked for the BPFI signature. A spall here rotates through the load zone once every revolution — a tell-tale periodic impact.',
+    fault: 'BPFI signature ≈ 290 Hz — a periodic impact for every revolution is the tell-tale spall marker.',
   },
   Cage: {
     title: 'Cage',
+    tagline: 'Ball retainer · wear indicator',
     what: 'The retainer that keeps the balls evenly spaced so they never touch each other, preserving rolling geometry and preventing skidding.',
     why: 'Cage wear shows up first as acoustic noise — a leading indicator of lubrication loss or misalignment before raceway damage.',
+    fault: 'Rising acoustic floor + irregular ball spacing — lubrication loss or cage-pocket wear.',
   },
   Shaft: {
     title: 'Shaft',
+    tagline: 'Torque input · rotor coupling',
     what: 'The rotating shaft that delivers torque into the bearing, spinning the inner race and the load zone around the raceway.',
     why: 'Imbalance, misalignment and runout all translate directly into vibration — the rotor is coupled 1:1 to the monitored bearing.',
+    fault: 'Energy at 1× / 2× RPM — imbalance and misalignment couple straight into the bearing.',
   },
   'Ball Element': {
     title: 'Ball Element',
+    tagline: 'Rolling element · live sensor node',
     what: 'A spherical rolling element carrying the radial load between inner and outer raceways with minimal rolling resistance.',
     why: 'Each ball is a live sensor node — vibration, temperature and anomaly score are streamed per element to catch the exact failing ball.',
+    fault: 'Anomaly score > 0.65 flags the exact failing ball before visible spalling.',
   },
 };
 
@@ -130,9 +149,7 @@ function TelemetryPanel({ selected, sensors, exploded }: { selected: { name: str
           ) : null
         ) : (
           <div className="text-[10px] text-slate-400 font-mono-data">
-            {exploded
-              ? 'Components separated — click any part to inspect it in detail'
-              : 'Press Explode to break the bearing apart like Iron Man\u2019s suit'}
+            {'Click Explode to open the full Iron Man disassembly view'}
           </div>
         )}
       </motion.div>
@@ -143,7 +160,7 @@ function TelemetryPanel({ selected, sensors, exploded }: { selected: { name: str
 export default function BearingModel({ className = '' }: { className?: string }) {
   const [webGLAvailable] = useState(() => checkWebGL());
   const [autoRotate, setAutoRotate] = useState(true);
-  const [exploded, setExploded] = useState(true);
+  const exploded = false; // landing always shows the assembled bearing — Explode opens the full Iron-Man page
   const [showLabels, setShowLabels] = useState(true);
   const [rpm, setRpm] = useState(12000);
   const [selected, setSelected] = useState<{ name: string; sensor?: LiveSensor } | null>(null);
@@ -191,14 +208,15 @@ export default function BearingModel({ className = '' }: { className?: string })
         >
           <Rotate3d className="w-3.5 h-3.5" /> {autoRotate ? 'Spin On' : 'Spin Off'}
         </motion.button>
-        <motion.button
-          whileTap={{ scale: 0.94 }}
-          onClick={() => setExploded((v) => !v)}
-          title="Exploded view"
-          className={`flex items-center gap-1.5 text-[11px] font-mono-data px-2.5 py-1.5 rounded-md border backdrop-blur transition-colors ${exploded ? 'bg-amber/15 border-amber/40 text-amber' : 'bg-[#0F1629]/85 border-navy text-slate-400 hover:text-slate-200'}`}
-        >
-          <Layers className="w-3.5 h-3.5" /> {exploded ? 'Assembled' : 'Explode'}
-        </motion.button>
+        <Link href="/bearing/exploded">
+          <motion.button
+            whileTap={{ scale: 0.94 }}
+            title="Open the full Iron Man disassembly view"
+            className="flex items-center gap-1.5 text-[11px] font-mono-data px-2.5 py-1.5 rounded-md border backdrop-blur transition-colors bg-amber/15 border-amber/40 text-amber hover:bg-amber/25"
+          >
+            <Layers className="w-3.5 h-3.5" /> Explode
+          </motion.button>
+        </Link>
         <motion.button
           whileTap={{ scale: 0.94 }}
           onClick={() => setShowLabels((v) => !v)}
@@ -223,31 +241,6 @@ export default function BearingModel({ className = '' }: { className?: string })
         />
         <span className="font-mono-data text-[11px] text-amber w-16 text-right">{(rpm / 1000).toFixed(1)}k RPM</span>
       </div>
-
-      {/* Component chips — quick part selection when exploded */}
-      {exploded && (
-        <div className="absolute bottom-16 left-1/2 -translate-x-1/2 z-20 flex flex-wrap justify-center gap-1.5 max-w-[92%] sm:max-w-[calc(100%-340px)]">
-          {Object.values(PART_DETAILS)
-            .filter((d) => d.title !== 'Ball Element')
-            .map((d) => {
-              const isSel = selected?.name === d.title;
-              return (
-                <motion.button
-                  key={d.title}
-                  whileTap={{ scale: 0.93 }}
-                  onClick={() => setSelected(isSel ? null : { name: d.title })}
-                  className={`px-2.5 py-1.5 rounded-md border text-[10px] font-mono-data backdrop-blur transition-colors ${
-                    isSel
-                      ? 'bg-amber/15 border-amber/50 text-amber'
-                      : 'bg-[#0F1629]/85 border-navy text-slate-300 hover:border-amber/40 hover:text-white'
-                  }`}
-                >
-                  {d.title}
-                </motion.button>
-              );
-            })}
-        </div>
-      )}
 
       <TelemetryPanel selected={selected} sensors={sensors} exploded={exploded} />
 

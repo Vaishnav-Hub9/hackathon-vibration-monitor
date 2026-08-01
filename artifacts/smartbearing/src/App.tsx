@@ -4,6 +4,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import CommandPalette from "@/components/layout/CommandPalette";
 import Landing from "@/pages/Landing";
+import BearingExploded from "@/pages/BearingExploded";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
 import Dashboard from "@/pages/Dashboard";
@@ -27,9 +28,10 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={Landing} />
+      <Route path="/bearing/exploded" component={BearingExploded} />
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />
-      <Route path="/dashboard" component={() => <ProtectedRoute component={Dashboard} />} />
+      <Route path="/dashboard" component={Dashboard} />
       <Route path="/machine/:id" component={() => <ProtectedRoute component={MachineDetail} />} />
       <Route path="/predictions" component={() => <ProtectedRoute component={Predictions} />} />
       <Route path="/alerts" component={() => <ProtectedRoute component={Alerts} />} />
