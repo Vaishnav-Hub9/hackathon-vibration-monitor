@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect, type RefObject } from 'react';
 import { Canvas, useFrame, type ThreeEvent } from '@react-three/fiber';
-import { OrbitControls, Html, ContactShadows, Environment, Lightformer, Sparkles, useCursor, Line, Billboard } from '@react-three/drei';
+import { OrbitControls, Html, ContactShadows, Environment, Lightformer, Sparkles, useCursor, Billboard } from '@react-three/drei';
 import * as THREE from 'three';
 import type { LiveSensor } from '@/hooks/useLandingSensors';
 
@@ -124,13 +124,13 @@ function PartLabel({ label, selected, onSelect }: { label: string; selected: boo
           {[0.24, -0.24].map((z) => (
             <mesh key={z} castShadow position={[0, 0, z]}>
               <torusGeometry args={[BALL_PITCH, 0.04, 10, 80]} />
-              <meshStandardMaterial
-                color={hot ? '#FBBF24' : '#B45309'}
-                metalness={0.6}
-                roughness={0.35}
-                emissive={hot ? '#F59E0B' : '#7C2D12'}
-                emissiveIntensity={0.6}
-              />
+            <meshStandardMaterial
+              color={hot ? '#FBBF24' : '#9AA7BD'}
+              metalness={0.85}
+              roughness={0.3}
+              emissive={hot ? '#F59E0B' : '#000000'}
+              emissiveIntensity={hot ? 0.5 : 0}
+            />
             </mesh>
           ))}
           {/* Pocket posts between the balls, locking them in the retainer */}
@@ -273,11 +273,12 @@ function Balls({
                 shows the numbers. At rest the train reads as one clean steel
                 ball set — not colored candy. */}
             <meshStandardMaterial
-              color={active ? '#ffffff' : '#A8B2C4'}
-              emissive={active ? color : '#000000'}
-              emissiveIntensity={active ? 0.55 : 0}
-              metalness={0.85}
-              roughness={0.18}
+              color={active ? '#ffffff' : '#D3DBE6'}
+              emissive={active ? color : '#262E3C'}
+              emissiveIntensity={active ? 0.55 : 0.3}
+              metalness={0.7}
+              roughness={0.2}
+              envMapIntensity={1.4}
             />
             {active && (
               <Billboard>
@@ -287,8 +288,8 @@ function Balls({
                 </mesh>
               </Billboard>
             )}
-            {active && (
-              <Html center distanceFactor={9} zIndexRange={[10, 0]} style={{ pointerEvents: 'none' }}>
+            {selectedId === s.id && (
+              <Html center distanceFactor={9} zIndexRange={[10, 0]} style={{ pointerEvents: 'none', transform: 'translateY(-30px)' }}>
                 <div className="bg-[#0A0E1A]/95 border border-amber/40 rounded-lg px-2.5 py-1.5 font-mono-data text-[10px] text-white whitespace-nowrap shadow-xl">
                   <span style={{ color }}>●</span> {s.id}
                   <div className="text-slate-400">{s.location}</div>
@@ -371,26 +372,6 @@ function BearingRig(props: BearingSceneProps) {
         {/* Balls */}
         <Balls sensors={sensors} exploded={exploded} rpm={props.rpm} selected={selected} onSelect={onSelect} />
       </group>
-
-      {/* Dashed assembly guide lines — show where each part flew from */}
-        {exploded &&
-        showLabels &&
-        (['Outer Race', 'Inner Race', 'Cage', 'Shaft'] as const).map((name) => {
-          const pts: [number, number, number][] = [[0, 0, 0], EXPLODED_POS[name]];
-          return (
-            <Line
-              key={name}
-              points={pts}
-              color="#F59E0B"
-              lineWidth={1}
-              dashed
-              dashSize={0.18}
-              gapSize={0.12}
-              transparent
-              opacity={0.45}
-            />
-          );
-        })}
 
       {/* Selected part tooltip (races/cage/shaft) */}
       {showLabels && selected && !selected.sensor && (() => {
