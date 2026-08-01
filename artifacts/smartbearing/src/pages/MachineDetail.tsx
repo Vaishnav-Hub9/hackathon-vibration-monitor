@@ -7,6 +7,7 @@ import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, RadarChart
 import { ChevronRight, Cpu, Activity, Zap, Thermometer, Radio } from 'lucide-react';
 import { machinesApi, alertsApi } from '@/lib/api';
 import { useLiveSensors } from '@/hooks/useLiveSensors';
+import OnshapeCadPanel from '@/components/dashboard/OnshapeCadPanel';
 
 export default function MachineDetail() {
   const params = useParams();
@@ -119,6 +120,7 @@ export default function MachineDetail() {
         <Tabs defaultValue="overview" className="w-full">
           <TabsList className="bg-navy-card border border-navy mb-6">
             <TabsTrigger value="overview" className="data-[state=active]:bg-navy data-[state=active]:text-amber">Overview</TabsTrigger>
+            <TabsTrigger value="cad" className="data-[state=active]:bg-navy data-[state=active]:text-amber">CAD Model</TabsTrigger>
             <TabsTrigger value="sensors" className="data-[state=active]:bg-navy data-[state=active]:text-amber">Live Sensors</TabsTrigger>
             <TabsTrigger value="vibration" className="data-[state=active]:bg-navy data-[state=active]:text-amber">Vibration Analysis</TabsTrigger>
             <TabsTrigger value="history" className="data-[state=active]:bg-navy data-[state=active]:text-amber">History</TabsTrigger>
@@ -161,6 +163,17 @@ export default function MachineDetail() {
                 </ResponsiveContainer>
               </div>
             </div>
+          </TabsContent>
+
+          <TabsContent value="cad">
+            <OnshapeCadPanel
+              machineId={machine.id}
+              machineName={machine.name}
+              machineStatus={machine.status}
+              healthScore={machine.healthScore}
+              liveData={liveData}
+              fftData={fftData}
+            />
           </TabsContent>
 
           <TabsContent value="sensors" className="space-y-6">

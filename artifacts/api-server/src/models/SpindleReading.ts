@@ -20,6 +20,7 @@ export interface ISpindleReading extends Document {
   bpfoScore: number;
   healthScore: number;
   anomalyFlag: boolean;
+  source?: 'simulator' | 'edge';
 }
 
 const SpindleReadingSchema: Schema = new Schema({
@@ -39,7 +40,8 @@ const SpindleReadingSchema: Schema = new Schema({
   voltageNormalized: { type: Number, required: true },
   bpfoScore: { type: Number, required: true },
   healthScore: { type: Number, required: true },
-  anomalyFlag: { type: Boolean, required: true }
+  anomalyFlag: { type: Boolean, required: true },
+  source: { type: String, enum: ['simulator', 'edge'], default: 'simulator' }
 });
 
 export const SpindleReading = mongoose.model<ISpindleReading>('SpindleReading', SpindleReadingSchema);

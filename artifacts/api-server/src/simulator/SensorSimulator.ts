@@ -87,10 +87,10 @@ class SensorSimulator {
                  body: JSON.stringify({ signal })
              });
              if (res.ok) {
-                 const mlData = await res.json();
+                 const mlData = (await res.json()) as { label?: string; confidence?: number; technician_summary?: string };
                  if (mlData.label) {
                      mlLabel = mlData.label;
-                     mlConfidence = mlData.confidence;
+                     mlConfidence = mlData.confidence ?? mlConfidence;
                      technicianSummary = mlData.technician_summary || "";
                  }
              }

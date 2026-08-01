@@ -87,11 +87,14 @@ router.get('/:id/spindles', async (req: Request, res: Response): Promise<void> =
       location: s.latestReading.spindleId,
       healthScore: s.latestReading.healthScore,
       anomalyScore: s.latestReading.bpfoScore,
-      vibrationRMS: s.latestReading.vibrationRMS,
+      accel_x: s.latestReading.accel_x,
+      accel_y: s.latestReading.accel_y,
+      accel_z: s.latestReading.accel_z,
+      rpm: s.latestReading.rpm,
       temperature: s.latestReading.temperature,
       voltage: s.latestReading.voltageNormalized,
       acousticLevel: s.latestReading.acousticRMS,
-      status: s.latestReading.anomalyFlag ? 'critical' : (s.latestReading.vibrationRMS > 1.5 ? 'warning' : 'healthy'),
+      status: s.latestReading.anomalyFlag ? 'critical' : (s.latestReading.accel_z > 1.5 ? 'warning' : 'healthy'),
       vibDelta: 0,
       tempDelta: 0
     }));
@@ -110,13 +113,13 @@ router.get('/:id/history', async (req: Request, res: Response): Promise<void> =>
     const readings = await SpindleReading.find({
       machineId: req.params.id,
       timestamp: { $gte: since }
-    }).sort({ timestamp: 1 }).select('timestamp vibrationRMS temperature').lean();
+    }).sort({ timestamp: 1 }).select('timestamp accel_x accel_y accel_z temperature').lean();
     
     const historyData = readings.map(r => {
       const d = new Date(r.timestamp);
       return {
         time: `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`,
-        value: r.vibrationRMS,
+        value: r.accel_z,
         temperature: r.temperature
       };
     });

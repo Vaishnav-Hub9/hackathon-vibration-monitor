@@ -57,3 +57,11 @@ Thumbs.db
 __pycache__/
 *.pyc
 *.pyo
+
+# Local runtime data (never commit)
+.freebuff/
+.mongo-data/
+
+# Windows junk
+nul
+*.nul

@@ -6,6 +6,7 @@ import alertsRouter from "./alerts.js";
 import analyticsRouter from "./analytics.js";
 import maintenanceRouter from "./maintenance.js";
 import simulatorRouter from "./simulator.js";
+import sensorsRouter from "./sensors.js";
 
 const router: IRouter = Router();
 
@@ -16,5 +17,6 @@ router.use("/alerts", alertsRouter);
 router.use("/analytics", analyticsRouter);
 router.use("/maintenance", maintenanceRouter);
 router.use("/simulator", simulatorRouter);
+router.use("/sensors", sensorsRouter);
 
 export default router;
