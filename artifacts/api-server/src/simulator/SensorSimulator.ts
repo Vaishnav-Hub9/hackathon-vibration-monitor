@@ -67,7 +67,7 @@ class SensorSimulator {
           const temperature = +(baseTemp + (Math.random() - 0.5) * 2).toFixed(1);
           
           // Generate 2048-point raw vibration signal to feed into ML model
-          const signal = new Array(2048).fill(0);
+          const signal = new Float64Array(2048);
           for (let s = 0; s < 2048; s++) {
             signal[s] = Math.sin(s * 0.1) * accel_z + (Math.random() - 0.5) * 0.1;
             if (machine.status === 'critical') {
@@ -85,7 +85,7 @@ class SensorSimulator {
              const res = await fetch(`${mlServerUrl}/predict`, {
                  method: "POST",
                  headers: { "Content-Type": "application/json" },
-                 body: JSON.stringify({ signal })
+                 body: JSON.stringify({ signal: Array.from(signal) })
              });
              if (res.ok) {
                  const mlData = (await res.json()) as { label?: string; confidence?: number; technician_summary?: string };

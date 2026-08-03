@@ -15,18 +15,33 @@
  * when mounted vertically), which would otherwise dominate bin 0 and inflate
  * every downstream RMS-based value.
  */
+// Precompute Sine/Cosine twiddle factors for FFT sizes up to 4096.
+// This completely eliminates trigonometric calculations and floating-point 
+// drift inside the high-frequency butterfly loops.
+const MAX_FFT_SIZE = 4096;
+const cosTable = new Float64Array(MAX_FFT_SIZE / 2);
+const sinTable = new Float64Array(MAX_FFT_SIZE / 2);
+for (let i = 0; i < MAX_FFT_SIZE / 2; i++) {
+  cosTable[i] = Math.cos((-2 * Math.PI * i) / MAX_FFT_SIZE);
+  sinTable[i] = Math.sin((-2 * Math.PI * i) / MAX_FFT_SIZE);
+}
+
 export function fftMagnitudeSpectrum(signal: number[]): number[] {
   const n = signal.length;
   if (n === 0) return [];
 
-  // Remove DC offset (mean) before transforming — standard vibration practice.
+  // Remove DC offset (mean) before transforming
   let mean = 0;
   for (const v of signal) mean += v;
   mean /= n;
 
-  // Pad to the next power of two so any buffer length is accepted.
+  // Pad to the next power of two
   let size = 1;
   while (size < n) size <<= 1;
+  
+  if (size > MAX_FFT_SIZE) {
+    throw new Error(`FFT size ${size} exceeds maximum supported size of ${MAX_FFT_SIZE}`);
+  }
 
   const re = new Float64Array(size);
   const im = new Float64Array(size);
@@ -47,26 +62,28 @@ export function fftMagnitudeSpectrum(signal: number[]): number[] {
     }
   }
 
-  // Butterfly stages
+  // Butterfly stages using precomputed twiddle factors
   for (let len = 2; len <= size; len <<= 1) {
-    const angle = (-2 * Math.PI) / len;
-    const wlenR = Math.cos(angle);
-    const wlenI = Math.sin(angle);
+    const halfLen = len / 2;
+    const step = MAX_FFT_SIZE / len;
+    
     for (let i = 0; i < size; i += len) {
-      let wR = 1;
-      let wI = 0;
-      for (let k = 0; k < len / 2; k++) {
-        const uR = re[i + k];
-        const uI = im[i + k];
-        const vR = re[i + k + len / 2] * wR - im[i + k + len / 2] * wI;
-        const vI = re[i + k + len / 2] * wI + im[i + k + len / 2] * wR;
-        re[i + k] = uR + vR;
-        im[i + k] = uI + vI;
-        re[i + k + len / 2] = uR - vR;
-        im[i + k + len / 2] = uI - vI;
-        const nwR = wR * wlenR - wI * wlenI;
-        wI = wR * wlenI + wI * wlenR;
-        wR = nwR;
+      for (let k = 0; k < halfLen; k++) {
+        const wR = cosTable[k * step];
+        const wI = sinTable[k * step];
+        
+        const idx = i + k;
+        const idxHalf = idx + halfLen;
+        
+        const uR = re[idx];
+        const uI = im[idx];
+        const vR = re[idxHalf] * wR - im[idxHalf] * wI;
+        const vI = re[idxHalf] * wI + im[idxHalf] * wR;
+        
+        re[idx] = uR + vR;
+        im[idx] = uI + vI;
+        re[idxHalf] = uR - vR;
+        im[idxHalf] = uI - vI;
       }
     }
   }

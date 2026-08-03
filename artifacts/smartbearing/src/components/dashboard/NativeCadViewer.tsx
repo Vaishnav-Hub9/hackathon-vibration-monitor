@@ -51,15 +51,17 @@ export const healthTone = (health: number) =>
 
 // Heat-map the part's base color toward amber/red as its health drops, so the
 // CAD geometry visually "reads" the live sensor stream from each part.
+const WARM_COLOR = new THREE.Color('#F59E0B');
+const HOT_COLOR = new THREE.Color('#EF4444');
+
 function heatColor(base: string, health: number): string {
   const c = new THREE.Color(base);
   if (health >= 70) return `#${c.getHexString()}`;
-  const warm = new THREE.Color('#F59E0B');
-  const hot = new THREE.Color('#EF4444');
+  
   const t = clamp((70 - health) / 70, 0, 1);
-  c.lerp(warm, Math.min(1, t * 1.4));
+  c.lerp(WARM_COLOR, Math.min(1, t * 1.4));
   if (health < 40) {
-    c.lerp(hot, clamp((40 - health) / 40, 0, 1));
+    c.lerp(HOT_COLOR, clamp((40 - health) / 40, 0, 1));
   }
   return `#${c.getHexString()}`;
 }

@@ -283,13 +283,17 @@ void connectWiFi() {
 bool uploadReading(float *acSignal, float rms) {
   if (WiFi.status() != WL_CONNECTED) return false;
 
-  // Build JSON body manually (2048 floats ~ 15 KB — fine on ESP32)
-  String body = String("{\"machineId\":\"") + MACHINE_ID +
-                "\",\"spindleId\":\"" + SPINDLE_ID +
-                "\",\"sampleRateHz\":" + String(SAMPLE_RATE_HZ) +
-                ",\"rpm\":" + String(NOMINAL_RPM, 0) +
-                ",\"temperature\":" + String(readTempC(), 1) +
-                ",\"signal\":[";
+  // Pre-allocate memory for the JSON string to prevent heap fragmentation
+  // 2048 floats * ~7 chars each + headers ≈ 15000 bytes
+  String body;
+  body.reserve(16000);
+  
+  body = String("{\"machineId\":\"") + MACHINE_ID +
+         "\",\"spindleId\":\"" + SPINDLE_ID +
+         "\",\"sampleRateHz\":" + String(SAMPLE_RATE_HZ) +
+         ",\"rpm\":" + String(NOMINAL_RPM, 0) +
+         ",\"temperature\":" + String(readTempC(), 1) +
+         ",\"signal\":[";
   char num[16];
   for (uint16_t i = 0; i < BUFFER_SIZE; i++) {
     dtostrf(acSignal[i], 1, 4, num);

@@ -48,7 +48,8 @@ def extract_features(window):
     features["crest_factor"] = peak / rms if rms != 0 else 0
     features["shape_factor"] = rms / mean_abs if mean_abs != 0 else 0
     features["impulse_factor"] = peak / mean_abs if mean_abs != 0 else 0
-    features["margin_factor"] = peak / (np.mean(np.sqrt(np.abs(window)))**2)
+    margin_denom = np.mean(np.sqrt(np.abs(window)))**2
+    features["margin_factor"] = peak / margin_denom if margin_denom != 0 else 0
     
     # Frequency Domain
     fft_values = np.abs(fft(window))
@@ -60,11 +61,15 @@ def extract_features(window):
     features["fft_energy"] = np.sum(fft_half**2)
     features["dominant_frequency"] = np.argmax(fft_half)
     
-    spectral_prob = fft_half / np.sum(fft_half)
+    fft_sum = np.sum(fft_half)
+    if fft_sum == 0:
+        fft_sum = 1e-12 # Prevent divide by zero on flatline signals
+        
+    spectral_prob = fft_half / fft_sum
     spectral_entropy = -np.sum(spectral_prob * np.log2(spectral_prob + 1e-12))
     
     features["spectral_entropy"] = spectral_entropy
-    features["spectral_centroid"] = np.sum(np.arange(len(fft_half)) * fft_half) / np.sum(fft_half)
+    features["spectral_centroid"] = np.sum(np.arange(len(fft_half)) * fft_half) / fft_sum
     
     return features
 
