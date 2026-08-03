@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import DashLayout from '@/components/layout/DashLayout';
 import { sensorNodes } from '@/data/mockData';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Slider } from '@/components/ui/slider';
-import { Save, Plus, BellRing, Settings as SettingsIcon, Factory } from 'lucide-react';
+import { Save, Plus, BellRing, Settings as SettingsIcon, Factory, CheckCircle2 } from 'lucide-react';
 
 export default function Settings() {
   const [anomalyWarning, setAnomalyWarning] = useState([0.35]);
@@ -14,6 +14,20 @@ export default function Settings() {
   const [tempCritical, setTempCritical] = useState([70]);
   const [vibWarning, setVibWarning] = useState([1.5]);
   const [vibCritical, setVibCritical] = useState([3.0]);
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const notify = useCallback((msg: string) => {
+    setToast(msg);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 2800);
+  }, []);
+
+  const saveThresholds = () => notify(`Thresholds saved — anomaly warn ${anomalyWarning[0]}, crit ${anomalyCritical[0]}`);
+  const saveNotifications = () => notify('Notification settings saved');
+  const saveProfile = () => notify('Factory profile saved');
+  const addNode = () => notify('Coming soon: edge node provisioning is handled at the gateway');
+  const configureNode = (id: string) => notify(`Opening configuration for node ${id}`);
 
   return (
     <DashLayout>
@@ -38,7 +52,7 @@ export default function Settings() {
                 <h3 className="text-white font-bold text-lg">Active Nodes ({sensorNodes.length})</h3>
                 <p className="text-slate-400 text-sm mt-1">Manage the edge sensor network across your machines.</p>
               </div>
-              <Button className="bg-amber hover:bg-amber/90 text-navy font-bold">
+              <Button onClick={addNode} className="bg-amber hover:bg-amber/90 text-navy font-bold">
                 <Plus className="w-4 h-4 mr-2" /> Add New Node
               </Button>
             </div>
@@ -68,7 +82,7 @@ export default function Settings() {
                           </span>
                         </td>
                         <td className="px-6 py-4 text-right">
-                          <Button variant="ghost" size="sm" className="h-8 text-slate-400 hover:text-white">Configure</Button>
+                          <Button onClick={() => configureNode(node.id)} variant="ghost" size="sm" className="h-8 text-slate-400 hover:text-white">Configure</Button>
                         </td>
                       </tr>
                     ))}
@@ -136,7 +150,7 @@ export default function Settings() {
                 </div>
 
                 <div className="pt-6">
-                  <Button className="bg-amber hover:bg-amber/90 text-navy font-bold">
+                  <Button onClick={saveThresholds} className="bg-amber hover:bg-amber/90 text-navy font-bold">
                     <Save className="w-4 h-4 mr-2" /> Save Thresholds
                   </Button>
                 </div>
@@ -192,7 +206,7 @@ export default function Settings() {
                 </div>
 
                 <div className="pt-6 border-t border-navy">
-                  <Button className="bg-amber hover:bg-amber/90 text-navy font-bold">
+                  <Button onClick={saveNotifications} className="bg-amber hover:bg-amber/90 text-navy font-bold">
                     <Save className="w-4 h-4 mr-2" /> Save Notification Settings
                   </Button>
                 </div>
@@ -238,7 +252,7 @@ export default function Settings() {
                 </div>
 
                 <div className="pt-6 border-t border-navy mt-8">
-                  <Button className="bg-amber hover:bg-amber/90 text-navy font-bold">
+                  <Button onClick={saveProfile} className="bg-amber hover:bg-amber/90 text-navy font-bold">
                     <Save className="w-4 h-4 mr-2" /> Save Profile
                   </Button>
                 </div>
@@ -247,6 +261,14 @@ export default function Settings() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {toast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-4 py-2.5 rounded-xl shadow-2xl text-sm font-medium"
+          style={{ background: '#0F1629', border: '1px solid #10B981', color: '#10B981' }}>
+          <CheckCircle2 className="w-4 h-4" />
+          {toast}
+        </div>
+      )}
     </DashLayout>
   );
 }

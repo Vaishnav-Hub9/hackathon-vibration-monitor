@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useLocation } from 'wouter';
 import { X, MessageCircle, ExternalLink } from 'lucide-react';
 import { alertsApi } from '@/lib/api';
 
@@ -16,6 +17,7 @@ type AlertData = {
 const ALERTS: AlertData[] = [];
 
 export default function WhatsAppAlert() {
+  const [, navigate] = useLocation();
   const [visible, setVisible] = useState(false);
   const [alertIdx, setAlertIdx] = useState(0);
   const [expanded, setExpanded] = useState(false);
@@ -188,19 +190,22 @@ export default function WhatsAppAlert() {
             </div>
 
             {/* Action buttons */}
-            <div className="flex border-t" style={{ borderColor: '#1F2C34' }}>                <button
-                  onClick={() => {
-                    setVisible(false);
-                    show(alertIdx + 1 >= alerts.length ? 0 : alertIdx + 1);
-                    setTimeout(() => setVisible(true), 300);
-                  }}
-                  className="flex-1 py-3 text-xs font-semibold text-[#8696A0] hover:text-white hover:bg-[#1F2C34] transition-colors"
-                >
-                  Next alert
-                </button>
+            <div className="flex border-t" style={{ borderColor: '#1F2C34' }}>
+              <button
+                onClick={() => {
+                  setVisible(false);
+                  setTimeout(() => show(alertIdx + 1 >= alerts.length ? 0 : alertIdx + 1), 350);
+                }}
+                className="flex-1 py-3 text-xs font-semibold text-[#8696A0] hover:text-white hover:bg-[#1F2C34] transition-colors"
+              >
+                Next alert
+              </button>
               <div className="w-px" style={{ background: '#1F2C34' }} />
               <button
-                onClick={() => setVisible(false)}
+                onClick={() => {
+                  setVisible(false);
+                  navigate('/alerts');
+                }}
                 className="flex-1 py-3 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
                 style={{ color: '#25D366' }}
               >

@@ -48,7 +48,6 @@ const WA_ALERTS = [
 
 function WhatsAppSimulator() {
   const [idx, setIdx] = useState(0);
-  const [visible, setVisible] = useState(true);
   const [dismissed, setDismissed] = useState(false);
   const alert = WA_ALERTS[idx];
   const isCritical = alert.type === 'CRITICAL';
@@ -57,10 +56,8 @@ function WhatsAppSimulator() {
     if (dismissed) return;
     let swap: ReturnType<typeof setTimeout> | undefined;
     const t = setInterval(() => {
-      setVisible(false);
       swap = setTimeout(() => {
         setIdx((i) => (i + 1) % WA_ALERTS.length);
-        setVisible(true);
       }, 450);
     }, 6000);
     return () => {
@@ -302,7 +299,7 @@ export default function Landing() {
           </motion.h2>
           <div className="grid md:grid-cols-3 gap-8">
             {[
-              { label: 'Average Downtime', value: `${Math.round(hoursSaved)}–6 hrs`, icon: ActivitySquare, color: '#F59E0B' },
+              { label: 'Average Downtime', value: `${Math.round(hoursSaved)} hrs`, icon: ActivitySquare, color: '#F59E0B' },
               { label: 'Cost Per Incident', value: `₹${Math.round(costSaved).toLocaleString()}+`, icon: ShieldAlert, color: '#EA580C' },
               { label: 'Spindles Protected', value: `${Math.round(spindles).toLocaleString()}+`, icon: Zap, color: '#10B981' },
             ].map((stat, i) => (

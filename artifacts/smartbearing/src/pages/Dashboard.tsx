@@ -160,7 +160,7 @@ export default function Dashboard() {
               <h3 className="text-sm font-semibold text-white">Live Sensor Feed</h3>
               <span className="text-[10px] text-slate-500 font-mono-data">Live via Socket.io</span>
             </div>
-            <Link href="/machine/M003" className="text-xs text-amber hover:underline">View all →</Link>
+            <Link href="/predictions" className="text-xs text-amber hover:underline">View all →</Link>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 divide-x divide-navy min-h-[100px]">
             {allSensors.map(s => {

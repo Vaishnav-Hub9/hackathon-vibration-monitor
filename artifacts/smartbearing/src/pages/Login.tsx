@@ -99,7 +99,13 @@ export default function Login() {
           <div className="space-y-2">
             <div className="flex justify-between items-center">
               <label className="text-sm font-medium text-slate-300">Password</label>
-              <a href="#" className="text-xs text-amber hover:text-amber/80 transition-colors">Forgot password?</a>
+              <button
+                type="button"
+                onClick={() => setError('Password reset is managed by your factory administrator. Contact them to reset your password.')}
+                className="text-xs text-amber hover:text-amber/80 transition-colors"
+              >
+                Forgot password?
+              </button>
             </div>
             <div className="relative">
               <Lock className="absolute left-3 top-3 h-5 w-5 text-slate-500" />

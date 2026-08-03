@@ -7,7 +7,7 @@ import { Link } from 'wouter';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { Download, CheckCircle2, Bell, Clock } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { alertsApi, analyticsApi } from '@/lib/api';
+import { alertsApi } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
 
 type AlertStatus = 'active' | 'acknowledged' | 'resolved';
@@ -36,10 +36,7 @@ export default function Alerts() {
     let isMounted = true;
     const fetchData = async () => {
       try {
-        const [alertsRes, trendsRes] = await Promise.all([
-          alertsApi.getAll(),
-          analyticsApi.getTrends()
-        ]);
+        const alertsRes = await alertsApi.getAll();
         if (!isMounted) return;
         setAlertList(alertsRes.data.data);
 
