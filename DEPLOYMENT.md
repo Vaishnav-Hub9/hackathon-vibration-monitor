@@ -54,7 +54,11 @@ Every push to `main` automatically redeploys **all three** — no manual steps a
 | Render (API) | `SIMULATOR_AUTO_START` | `true` (set in `render.yaml`) |
 | Render (API) | `ML_SERVER_URL` | auto from blueprint |
 | Render (API) | `PORT` | `5000` (set in `render.yaml`) |
-| Render (ML) | `OPENAI_API_KEY` | optional — technician summaries fall back to mock text |
+| Render (ML) | `AZURE_OPENAI_API_KEY` | optional — Azure OpenAI technician summaries (needs endpoint + deployment too) |
+| Render (ML) | `AZURE_OPENAI_ENDPOINT` | e.g. `https://your-resource.openai.azure.com/` |
+| Render (ML) | `AZURE_OPENAI_DEPLOYMENT` | deployment name, e.g. `gpt-35-turbo` |
+| Render (ML) | `AZURE_OPENAI_API_VERSION` | `2024-06-01` (default) |
+| Render (ML) | `OPENAI_API_KEY` | optional plain-OpenAI fallback when Azure vars are unset |
 | Vercel | `VITE_API_URL` | `https://smartbearing-api.onrender.com` |
 
 ---

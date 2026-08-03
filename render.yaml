@@ -41,3 +41,16 @@ services:
     rootDir: artifacts/api-server/src/ml
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT
+    envVars:
+      # AI Technician Summaries — Azure OpenAI (set all three in the dashboard to enable).
+      # If left unset, /predict falls back to a realistic mock summary.
+      - key: AZURE_OPENAI_API_KEY
+        sync: false
+      - key: AZURE_OPENAI_ENDPOINT
+        sync: false
+      - key: AZURE_OPENAI_DEPLOYMENT
+        sync: false
+      - key: AZURE_OPENAI_API_VERSION
+        value: 2024-06-01
+      - key: OPENAI_API_KEY
+        sync: false

@@ -8,13 +8,35 @@ import pywt
 from fastapi import FastAPI
 from pydantic import BaseModel
 from typing import List
-from openai import OpenAI
+from openai import OpenAI, AzureOpenAI
+from dotenv import load_dotenv
+
+# Load a local .env (e.g. artifacts/api-server/src/ml/.env) if present, so keys
+# can live in a gitignored file instead of the shell/process environment.
+load_dotenv()
 
 app = FastAPI()
 
-# Optionally set this in environment for actual Azure/OpenAI integration
+# AI technician summaries — Azure OpenAI is used when its env vars are set,
+# otherwise plain OpenAI, otherwise a realistic mock fallback (demo-ready,
+# no key required). No secrets live in code; all values come from env.
+AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY", "")
+AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT", "")
+AZURE_OPENAI_DEPLOYMENT = os.getenv("AZURE_OPENAI_DEPLOYMENT", "")
+AZURE_OPENAI_API_VERSION = os.getenv("AZURE_OPENAI_API_VERSION", "2024-06-01")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
+
+azure_client = None
+openai_client = None
+if AZURE_OPENAI_API_KEY and AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_DEPLOYMENT:
+    azure_client = AzureOpenAI(
+        api_key=AZURE_OPENAI_API_KEY,
+        azure_endpoint=AZURE_OPENAI_ENDPOINT,
+        api_version=AZURE_OPENAI_API_VERSION,
+    )
+elif OPENAI_API_KEY:
+    openai_client = OpenAI(api_key=OPENAI_API_KEY)
 
 model_dir = os.path.join(os.path.dirname(__file__), 'models')
 model = joblib.load(os.path.join(model_dir, "smartline_final.pkl"))
@@ -89,16 +111,29 @@ def generate_technician_summary(label: str, confidence: float, features: dict) -
     rms = features.get("rms", 0)
     fft_dom = features.get("dominant_frequency", 0)
     
-    if client:
+    prompt = f"Write a 2-sentence technician summary and recommendation for a rotating machine showing {label} with {confidence*100:.1f}% confidence. RMS is {rms:.3f}, dominant FFT peak is at index {fft_dom}."
+
+    if azure_client:
         try:
-            prompt = f"Write a 2-sentence technician summary and recommendation for a rotating machine showing {label} with {confidence*100:.1f}% confidence. RMS is {rms:.3f}, dominant FFT peak is at index {fft_dom}."
-            response = client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[{"role": "system", "content": "You are a factory diagnostics AI."}, 
+            # Azure OpenAI: `model` is the deployment name configured in the portal
+            response = azure_client.chat.completions.create(
+                model=AZURE_OPENAI_DEPLOYMENT,
+                messages=[{"role": "system", "content": "You are a factory diagnostics AI."},
                           {"role": "user", "content": prompt}]
             )
             return response.choices[0].message.content
-        except Exception as e:
+        except Exception:
+            pass # Fallback to mock
+
+    if openai_client:
+        try:
+            response = openai_client.chat.completions.create(
+                model=OPENAI_MODEL,
+                messages=[{"role": "system", "content": "You are a factory diagnostics AI."},
+                          {"role": "user", "content": prompt}]
+            )
+            return response.choices[0].message.content
+        except Exception:
             pass # Fallback to mock
 
     # Mock fallback if no API key or API fails (Perfect for Hackathon MVP)
