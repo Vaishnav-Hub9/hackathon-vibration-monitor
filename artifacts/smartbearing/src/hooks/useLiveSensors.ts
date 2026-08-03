@@ -71,7 +71,7 @@ export function useLiveSensors(machineId?: string) {
             rpm: data.rpm,
             temperature: data.temperature,
             anomalyScore: data.bpfoScore,
-            acousticLevel: 0.3,
+            acousticLevel: data.acousticRMS ?? 0,
             status,
             vibDelta: existingIdx >= 0 ? +(data.accel_z - prev[existingIdx].accel_z).toFixed(3) : 0,
             tempDelta: existingIdx >= 0 ? +(data.temperature - prev[existingIdx].temperature).toFixed(1) : 0,

@@ -7,6 +7,7 @@ export interface IAlert extends Document {
   type: string;
   message: string;
   technicianSummary?: string;
+  anomalyScore?: number;
   detectedAt: Date;
   acknowledgedAt?: Date;
   resolvedAt?: Date;
@@ -20,6 +21,7 @@ const AlertSchema: Schema = new Schema({
   type: { type: String, required: true },
   message: { type: String, required: true },
   technicianSummary: { type: String },
+  anomalyScore: { type: Number },
   detectedAt: { type: Date, required: true, default: Date.now, index: true },
   acknowledgedAt: { type: Date },
   resolvedAt: { type: Date },

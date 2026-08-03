@@ -20,6 +20,9 @@ export interface ISpindleReading extends Document {
   bpfoScore: number;
   healthScore: number;
   anomalyFlag: boolean;
+  mlLabel?: string;
+  mlConfidence?: number;
+  waveform?: number[];
   source?: 'simulator' | 'edge';
 }
 
@@ -41,6 +44,9 @@ const SpindleReadingSchema: Schema = new Schema({
   bpfoScore: { type: Number, required: true },
   healthScore: { type: Number, required: true },
   anomalyFlag: { type: Boolean, required: true },
+  mlLabel: { type: String },
+  mlConfidence: { type: Number },
+  waveform: [{ type: Number }],
   source: { type: String, enum: ['simulator', 'edge'], default: 'simulator' }
 });
 

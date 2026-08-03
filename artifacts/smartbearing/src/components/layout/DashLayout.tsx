@@ -9,10 +9,12 @@ import {
   Menu,
   LogOut,
   LogIn,
-  ChevronDown
+  ChevronDown,
+  Cpu
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import NotificationBell from '@/components/layout/NotificationBell';
+import { getSocket } from '@/lib/socket';
 
 interface DashLayoutProps {
   children: ReactNode;
@@ -25,12 +27,44 @@ export default function DashLayout({ children }: DashLayoutProps) {
   const [loggedIn, setLoggedIn] = useState(
     () => localStorage.getItem('isLoggedIn') === 'true'
   );
+  const [mlOnline, setMlOnline] = useState<boolean | null>(null);
 
   useEffect(() => {
     const timer = setInterval(() => {
       setTimeAgo((prev) => prev + 1);
     }, 1000);
     return () => clearInterval(timer);
+  }, []);
+
+  // Listen for real ML model status from the backend — no fake predictions
+  useEffect(() => {
+    // Initial probe so the banner resolves immediately even before any socket event
+    (async () => {
+      try {
+        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+        const res = await fetch(`${API_URL}/api/health/ml`, {
+          headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` },
+        });
+        const json = await res.json();
+        if (json?.data && typeof json.data.online === 'boolean') setMlOnline(json.data.online);
+      } catch (e) {
+        // API unreachable — leave banner state unresolved
+      }
+    })();
+
+    const socket = getSocket();
+    const onMlStatus = (data: { online?: boolean }) => {
+      if (data && typeof data.online === 'boolean') setMlOnline(data.online);
+    };
+    const onFleetSummary = (data: any) => {
+      if (data && typeof data.mlOnline === 'boolean') setMlOnline(data.mlOnline);
+    };
+    socket.on('ml:status', onMlStatus);
+    socket.on('fleet:summary', onFleetSummary);
+    return () => {
+      socket.off('ml:status', onMlStatus);
+      socket.off('fleet:summary', onFleetSummary);
+    };
   }, []);
 
   const handleLogout = () => {
@@ -137,6 +171,15 @@ export default function DashLayout({ children }: DashLayoutProps) {
 
         {/* Page Content */}
         <div className="flex-1 p-4 sm:p-6 lg:p-8">
+          {mlOnline === false && (
+            <div className="mb-6 flex items-center gap-3 bg-[#2B0D0A] border border-[#EA580C]/40 text-[#EA580C] px-4 py-3 rounded-xl text-sm font-medium">
+              <Cpu className="w-5 h-5 flex-shrink-0 animate-pulse" />
+              <div>
+                <span className="font-bold">ML model offline</span>
+                <span className="text-[#f0b28a]"> — predictions are paused. Start the ML server (start-ml.bat, port 8000) to resume real model inference.</span>
+              </div>
+            </div>
+          )}
           {children}
         </div>
       </main>

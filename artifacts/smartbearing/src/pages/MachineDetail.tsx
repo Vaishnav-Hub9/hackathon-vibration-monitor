@@ -24,10 +24,11 @@ export default function MachineDetail() {
     let isMounted = true;
     const fetchData = async () => {
       try {
-        const [machineRes, alertsRes, fftRes] = await Promise.all([
+        const [machineRes, alertsRes, fftRes, waveRes] = await Promise.all([
           machinesApi.getById(machineId),
           alertsApi.getAll({ machineId }),
-          machinesApi.getFFT(machineId)
+          machinesApi.getFFT(machineId),
+          machinesApi.getWaveform(machineId)
         ]);
         
         if (!isMounted) return;
@@ -36,14 +37,8 @@ export default function MachineDetail() {
         setMAlerts(alertsRes.data.data);
         setFftData(fftRes.data.data || []);
         
-        const wf = Array.from({ length: 100 }, (_, i) => {
-          let value = Math.sin(i * 0.3) * 0.3;
-          if (machineRes.data.data.status === 'critical') {
-            value = Math.sin(i * 0.3) * 1.5 + (Math.random() > 0.85 ? (Math.random() - 0.5) * 4 : 0);
-          }
-          return { t: i, value };
-        });
-        setWaveformData(wf);
+        // Real stored waveform (downsampled actual samples, not synthetic)
+        setWaveformData(waveRes.data.data || []);
       } catch (err) {
         console.error(err);
       }
@@ -53,9 +48,15 @@ export default function MachineDetail() {
     
     const interval = setInterval(async () => {
       try {
-        const fftRes = await machinesApi.getFFT(machineId);
+        const [fftRes, waveRes] = await Promise.all([
+          machinesApi.getFFT(machineId),
+          machinesApi.getWaveform(machineId)
+        ]);
         if (isMounted && fftRes.data.data) {
            setFftData(fftRes.data.data);
+        }
+        if (isMounted && waveRes.data.data && waveRes.data.data.length > 0) {
+           setWaveformData(waveRes.data.data);
         }
       } catch (e) {}
     }, 4000);
@@ -77,12 +78,15 @@ export default function MachineDetail() {
 
   const radarData = useMemo(() => {
     if (!liveData) return [];
+    // Radar values map real readings proportionally onto a 0-100 scale.
+    const vib = Math.min(100, Math.max(0, (liveData.accel_z || 0) * 40));
+    const aco = Math.min(100, Math.max(0, (liveData.acousticLevel || 0) * 80));
+    const tmp = Math.min(100, Math.max(0, ((liveData.temperature || 25) - 25) * 2));
     return [
-      { subject: 'Vibration', A: liveData.anomalyScore > 0.5 ? 90 : 30, fullMark: 100 },
-      { subject: 'Acoustics', A: liveData.acousticLevel > 1.0 ? 85 : 40, fullMark: 100 },
-      { subject: 'Temperature', A: liveData.temperature > 60 ? 80 : 50, fullMark: 100 },
-      { subject: 'Voltage', A: 20, fullMark: 100 },
-      { subject: 'Anomaly', A: liveData.anomalyScore * 100, fullMark: 100 },
+      { subject: 'Vibration', A: +vib.toFixed(0), fullMark: 100 },
+      { subject: 'Acoustics', A: +aco.toFixed(0), fullMark: 100 },
+      { subject: 'Temperature', A: +tmp.toFixed(0), fullMark: 100 },
+      { subject: 'Anomaly', A: +(liveData.anomalyScore * 100).toFixed(0), fullMark: 100 },
     ];
   }, [liveData]);
 

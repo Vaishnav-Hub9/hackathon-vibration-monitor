@@ -29,6 +29,7 @@ export const machinesApi = {
   getSpindles: (id: string) => api.get(`/machines/${id}/spindles`),
   getHistory: (id: string, hours = 24) => api.get(`/machines/${id}/history?hours=${hours}`),
   getFFT: (id: string) => api.get(`/machines/${id}/fft`),
+  getWaveform: (id: string) => api.get(`/machines/${id}/waveform`),
   getRUL: (id: string) => api.get(`/machines/${id}/rul`)
 };
 
@@ -43,7 +44,8 @@ export const analyticsApi = {
   getSummary: () => api.get('/analytics/summary'),
   getTrends: () => api.get('/analytics/trends'),
   getROI: () => api.get('/analytics/roi'),
-  getHeatmap: () => api.get('/analytics/heatmap')
+  getHeatmap: () => api.get('/analytics/heatmap'),
+  getMonthly: () => api.get('/analytics/monthly')
 };
 
 export const maintenanceApi = {

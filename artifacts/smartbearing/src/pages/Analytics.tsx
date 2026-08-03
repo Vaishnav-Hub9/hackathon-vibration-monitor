@@ -15,19 +15,22 @@ export default function Analytics() {
     avgHealthScore: 0,
     alertsToday: 0,
   });
-  const [roiData, setRoiData] = useState<any>({ preventedFailures: 0, estimatedSavings: 0, avgDowntimePrevented: 0 });
+  const [roiData, setRoiData] = useState<any>({ preventedFailures: 0, estimatedSavings: 0, downtimePrevented: 0 });
   const [heatmapData, setHeatmapData] = useState<any[]>([]);
   const [fleetChartData, setFleetChartData] = useState<any[]>([]);
+  const [alertBarData, setAlertBarData] = useState<any[]>([]);
 
   useEffect(() => {
     let isMounted = true;
     const fetchData = async () => {
       try {
-        const [machinesRes, summaryRes, roiRes, heatmapRes] = await Promise.all([
+        const [machinesRes, summaryRes, roiRes, heatmapRes, trendsRes, monthlyRes] = await Promise.all([
           machinesApi.getAll(),
           analyticsApi.getSummary(),
           analyticsApi.getROI(),
-          analyticsApi.getHeatmap()
+          analyticsApi.getHeatmap(),
+          analyticsApi.getTrends(),
+          analyticsApi.getMonthly()
         ]);
         if (!isMounted) return;
         setMachineList(machinesRes.data.data);
@@ -35,18 +38,13 @@ export default function Analytics() {
         setRoiData(roiRes.data.data);
         setHeatmapData(heatmapRes.data.data);
 
-        // Generate fleet chart from real machines
-        const machines = machinesRes.data.data.slice(0, 3);
-        const chart = Array.from({ length: 30 }, (_, i) => {
-          const entry: any = { day: `D${i + 1}` };
-          machines.forEach((m: any, idx: number) => {
-            const base = m.healthScore;
-            const drift = idx === 1 ? -(i * 0.5) : 0; // degrading machine drops
-            entry[m.name] = +(Math.max(20, base + drift + (Math.random() - 0.5) * 3)).toFixed(1);
-          });
-          return entry;
-        });
+        // Real 30-day fleet trajectory from the trends endpoint
+        const trends = trendsRes.data.data || [];
+        const chart = trends.map((d: any) => ({ day: `D${d.day}`, 'Fleet Average': d.avgHealth ?? 0 }));
         setFleetChartData(chart);
+
+        // Real 12-month alert data from the monthly endpoint
+        setAlertBarData(monthlyRes.data.data || []);
       } catch (err) {
         console.error(err);
       }
@@ -54,13 +52,6 @@ export default function Analytics() {
     fetchData();
     return () => { isMounted = false; };
   }, []);
-
-  const alertBarData = Array.from({ length: 12 }, (_, i) => ({
-    month: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][i],
-    Critical: Math.floor(Math.random() * 4),
-    Warning: Math.floor(Math.random() * 8) + 1,
-    Prevented: Math.floor(Math.random() * 6) + 2,
-  }));
 
   const saved = calcInputs.machines * calcInputs.valPerHour * calcInputs.downtime * calcInputs.incidents * 0.8;
 
@@ -102,9 +93,9 @@ export default function Analytics() {
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           {[
             { label: 'Total Machines', val: summary.totalMachines },
-            { label: 'Sensor Uptime', val: '94.2%' },
+            { label: 'Sensor Uptime', val: `${summary.sensorUptime ?? 0}%` },
             { label: 'Failures Prevented', val: roiData.preventedFailures },
-            { label: 'Downtime Saved', val: `${roiData.avgDowntimePrevented}h` },
+            { label: 'Downtime Saved', val: `${roiData.downtimePrevented ?? 0}h` },
             { label: 'Cost Saved', val: `₹${roiData.estimatedSavings.toLocaleString()}`, color: 'text-[#10B981]' },
             { label: 'Avg Health', val: `${summary.avgHealthScore}%`, color: 'text-amber' }
           ].map((s, i) => (
@@ -141,7 +132,7 @@ export default function Analytics() {
                   <Tooltip contentStyle={{ backgroundColor: '#0F1629', borderColor: '#1E2D4A', borderRadius: '8px' }} itemStyle={{ fontFamily: 'JetBrains Mono', fontSize: '12px' }} />
                   <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
                   {machineNames.map((name, idx) => (
-                    <Area key={name} type="monotone" dataKey={name} stroke={lineColors[idx]} fillOpacity={1} fill={`url(#${gradientIds[idx]})`} strokeWidth={2} dot={false} />
+                    <Area key={name} type="monotone" dataKey={name} stroke={lineColors[idx % lineColors.length]} fillOpacity={1} fill={`url(#${gradientIds[idx % gradientIds.length]})`} strokeWidth={2} dot={false} />
                   ))}
                 </AreaChart>
               </ResponsiveContainer>

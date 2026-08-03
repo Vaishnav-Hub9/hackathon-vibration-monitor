@@ -28,7 +28,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
       machineName: machineMap[a.machineId] || a.machineId,
       type: a.severity.toUpperCase(),
       message: a.message,
-      anomalyScore: 0.85, // Simple mock value since it's not stored in alert schema
+      anomalyScore: a.anomalyScore ?? 0,
       timestamp: a.detectedAt.toISOString().replace('T', ' ').substring(0, 19),
       status: a.status,
       estimatedTimeToFailure: a.severity === 'critical' ? '6-18 hours' : (a.severity === 'warning' ? '3-7 days' : null)

@@ -42,12 +42,13 @@ export default function Alerts() {
         ]);
         if (!isMounted) return;
         setAlertList(alertsRes.data.data);
-        
-        const timeline = Array.from({ length: 30 }, (_, i) => ({
-          day: i + 1,
-          critical: Math.random() > 0.8 ? Math.floor(Math.random() * 3) : 0,
-          warning: Math.floor(Math.random() * 5),
-          info: Math.floor(Math.random() * 8),
+
+        // Real 30-day alert timeline aggregated from the database
+        const timeline = (trendsRes.data.data || []).map((d: any) => ({
+          day: d.day,
+          critical: d.critical ?? 0,
+          warning: d.warning ?? 0,
+          info: Math.max(0, d.alerts - (d.critical ?? 0) - (d.warning ?? 0)),
         }));
         setTimelineData(timeline);
       } catch (err) {

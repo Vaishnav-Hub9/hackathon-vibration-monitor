@@ -6,6 +6,7 @@ import { Machine } from '../models/Machine.js';
 import { SpindleReading } from '../models/SpindleReading.js';
 import { Alert } from '../models/Alert.js';
 import { MaintenanceLog } from '../models/MaintenanceLog.js';
+import { computeFFTBins } from '../lib/fft.js';
 
 dotenv.config();
 
@@ -46,29 +47,46 @@ async function seed(): Promise<void> {
     await Machine.insertMany(machinesData);
     console.log('Seeded machines');
 
+    // Deterministic bootstrap readings — no Math.random, real FFT computed from
+    // a fixed signal via the same DSP used by the live pipeline. The sensor
+    // simulator replaces these with real ML-processed readings within seconds.
+    const signal = (amp: number, faultAmp: number) => {
+      const s = new Array<number>(2048);
+      for (let k = 0; k < 2048; k++) {
+        let v = Math.sin(k * 0.1) * amp;
+        if (faultAmp > 0 && k % 100 < 5) v += faultAmp * 2;
+        s[k] = v;
+      }
+      return s;
+    };
+
     for (const machine of machinesData) {
-      const vibBase = machine.status === 'critical' ? 2.4 : machine.status === 'warning' ? 1.3 : 0.45;
+      const amp = machine.status === 'critical' ? 2.4 : machine.status === 'warning' ? 1.3 : 0.45;
+      const faultAmp = machine.status === 'critical' ? 4 : machine.status === 'warning' ? 1.5 : 0;
       const tempBase = machine.status === 'critical' ? 74 : machine.status === 'warning' ? 56 : 39;
       const healthBase = machine.status === 'critical' ? 34 : machine.status === 'warning' ? 66 : 92;
+      const sig = signal(amp, faultAmp);
+      const fft = computeFFTBins(sig, 1000, 128);
+      const anomaly = machine.status === 'critical';
       for (let i = 1; i <= 5; i++) {
-        const accel_z = +(vibBase + (Math.random() - 0.5) * 0.3).toFixed(3);
         await SpindleReading.create({
           machineId: machine.machineId,
           spindleId: `SN00${i}`,
-          accel_x: +(accel_z * 0.4).toFixed(3),
-          accel_y: +(accel_z * 0.6).toFixed(3),
-          accel_z,
-          rpm: 14200 + Math.round((Math.random() - 0.5) * 200),
-          vibrationFFT: Array.from({ length: 128 }, (_, j) => ({
-            freq: j * (1000/128),
-            amplitude: machine.status === 'critical' && Math.abs(j * (1000/128) - 157) < 10 ? 0.9 + Math.random() * 0.4 : 0.05
-          })),
-          acousticRMS: machine.status === 'critical' ? 1.2 : machine.status === 'warning' ? 0.6 : 0.3,
+          accel_x: +(amp * 0.4).toFixed(3),
+          accel_y: +(amp * 0.6).toFixed(3),
+          accel_z: +amp.toFixed(3),
+          rpm: 14200,
+          vibrationFFT: fft,
+          acousticRMS: +amp.toFixed(3),
           temperature: tempBase,
           voltageNormalized: 220,
           bpfoScore: machine.status === 'critical' ? 0.8 : machine.status === 'warning' ? 0.4 : 0.1,
           healthScore: healthBase,
-          anomalyFlag: machine.status === 'critical'
+          anomalyFlag: anomaly,
+          mlLabel: anomaly ? 'Outer Race Fault' : 'Healthy',
+          mlConfidence: anomaly ? 0.9 : 0.98,
+          waveform: sig.filter((_, k) => k % 8 === 0),
+          source: 'simulator'
         });
       }
     }

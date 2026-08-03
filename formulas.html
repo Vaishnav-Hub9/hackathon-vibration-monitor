@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SmartBearing — Math &amp; Methods (Judge One-Pager)</title>
+<script>
+  MathJax = {
+    tex: { inlineMath: [['$', '$'], ['\\(', '\\)']], displayMath: [['$$', '$$'], ['\\[', '\\]']] },
+    svg: { fontCache: 'global' }
+  };
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js" async></script>
+<style>
+  :root {
+    --navy: #0B1220; --card: #0F1629; --amber: #F59E0B; --orange: #EA580C;
+    --green: #10B981; --blue: #3B82F6; --text: #E2E8F0; --muted: #94A3B8;
+    --border: #1E2D4A;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--navy); color: var(--text); line-height: 1.6; padding: 24px;
+  }
+  .page { max-width: 860px; margin: 0 auto; }
+
+  header.hero {
+    background: linear-gradient(135deg, #0F1629, #141E35);
+    border: 1px solid var(--border); border-radius: 16px; padding: 28px 32px; margin-bottom: 24px;
+  }
+  header.hero h1 { font-size: 26px; color: #fff; letter-spacing: 0.5px; }
+  header.hero h1 span { color: var(--amber); }
+  header.hero p { color: var(--muted); margin-top: 6px; font-size: 14px; }
+  .pipeline { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; font-size: 12.5px; font-weight: 600; }
+  .pipe-step { background: #0B1220; border: 1px solid var(--border); padding: 6px 12px; border-radius: 999px; color: var(--text); }
+  .pipe-arrow { color: var(--amber); align-self: center; }
+
+  .btn-bar { text-align: right; margin-bottom: 20px; }
+  .btn {
+    background: linear-gradient(135deg, var(--amber), #D97706); color: #0B1220;
+    border: none; padding: 10px 22px; border-radius: 10px; font-weight: 700; font-size: 14px;
+    cursor: pointer; transition: transform .15s;
+  }
+  .btn:hover { transform: scale(1.03); }
+
+  section { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 22px 26px; margin-bottom: 20px; }
+  section h2 { font-size: 18px; color: var(--amber); margin-bottom: 4px; display: flex; align-items: center; gap: 10px; }
+  section h2 .tag { font-size: 11px; background: #1E2D4A; color: var(--muted); padding: 3px 9px; border-radius: 999px; font-weight: 600; }
+  section h3 { font-size: 14.5px; color: #fff; margin: 14px 0 6px; }
+  section p { font-size: 14px; color: var(--text); margin-bottom: 8px; }
+  .why { font-size: 13px; color: var(--green); margin-top: 6px; }
+  .why b { color: var(--green); }
+  .formula { text-align: center; padding: 14px 10px; margin: 12px 0; background: #0B1220; border-radius: 10px; border: 1px solid var(--border); font-size: 15px; }
+  .formula mjx-container { color: #fff; }
+
+  table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 13.5px; }
+  th { background: #0B1220; color: var(--amber); text-align: left; padding: 8px 12px; border: 1px solid var(--border); font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+  td { padding: 8px 12px; border: 1px solid var(--border); color: var(--text); vertical-align: top; }
+  td .form { color: var(--blue); font-weight: 600; white-space: nowrap; }
+  td .form mjx-container { color: var(--blue); }
+
+  .callout { background: #2B0D0A; border: 1px solid rgba(234,88,12,.4); border-left: 4px solid var(--orange); padding: 12px 16px; border-radius: 8px; font-size: 13.5px; margin: 10px 0; }
+  .callout b { color: var(--orange); }
+  .script { background: #0B1220; border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; font-size: 13.5px; color: var(--text); white-space: pre-wrap; }
+
+  .footer { text-align: center; color: var(--muted); font-size: 12px; padding: 16px 0 8px; }
+
+  @media print {
+    body { background: #fff; color: #111; padding: 0; }
+    .page { max-width: 100%; }
+    .btn-bar { display: none; }
+    section, header.hero { background: #fff; border-color: #ddd; box-shadow: none; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    section h2 { color: #B45309; }
+    th { background: #f3f4f6; }
+    .formula, .script, .callout { background: #f9fafb; border-color: #e5e7eb; }
+    .formula mjx-container, td .form mjx-container, section p, td, .why, .callout { color: #111; }
+    h1 { color: #111; } header.hero h1 span { color: #B45309; }
+    .pipe-step { background: #f3f4f6; border-color: #e5e7eb; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="hero">
+    <h1>Smart<span>Bearing</span> — Math &amp; Methods</h1>
+    <p>Predictive Bearing Maintenance · ESP32 + ML + Live Dashboard · Hackathon Technical One-Pager</p>
+    <div class="pipeline">
+      <span class="pipe-step">ESP32 / Simulator</span><span class="pipe-arrow">→</span>
+      <span class="pipe-step">2048 samples</span><span class="pipe-arrow">→</span>
+      <span class="pipe-step">37 features</span><span class="pipe-arrow">→</span>
+      <span class="pipe-step">ML model</span><span class="pipe-arrow">→</span>
+      <span class="pipe-step">Fault + Confidence</span><span class="pipe-arrow">→</span>
+      <span class="pipe-step">MongoDB + WebSocket</span><span class="pipe-arrow">→</span>
+      <span class="pipe-step">Live Dashboard</span>
+    </div>
+  </header>
+
+  <div class="btn-bar">
+    <button class="btn" onclick="window.print()">⬇ Print / Save as PDF</button>
+  </div>
+
+  <!-- 1. FFT -->
+  <section>
+    <h2>1. Fast Fourier Transform — Cooley–Tukey Butterfly <span class="tag">lib/fft.ts</span></h2>
+    <p>The Fourier Transform converts a time-domain vibration signal into its frequency components — the machine's "fingerprint":</p>
+    <div class="formula">$$X[k] = \sum_{n=0}^{N-1} x[n]\, e^{-i 2\pi k n / N}, \qquad k = 0 \dots N-1$$</div>
+    <p>The <b>butterfly trick</b> splits the sum into even/odd samples and reuses partial results:</p>
+    <div class="formula">$$X[k] = X_{even}[k] + W_N^k\, X_{odd}[k] \qquad X[k + N/2] = X_{even}[k] - W_N^k\, X_{odd}[k]$$</div>
+    <p>with the <b>twiddle factor</b>:</p>
+    <div class="formula">$$W_N^k = e^{-i 2\pi k / N} = \cos\!\left(\tfrac{2\pi k}{N}\right) - i \sin\!\left(\tfrac{2\pi k}{N}\right)$$</div>
+    <p class="why"><b>Why it matters:</b> naive DFT is $O(N^2)$; the butterfly recursion makes it $O(N \log N)$. For 2048 points: ~4.2M → ~22K operations (~180× faster), which is what makes live analysis possible. We precompute the cos/sin tables and AC-couple the signal (subtract the mean) so the accelerometer's +1&nbsp;g gravity offset doesn't dominate bin 0.</p>
+  </section>
+
+  <!-- 2. Time domain -->
+  <section>
+    <h2>2. Time-Domain Features <span class="tag">ml/server.py · extract_features()</span></h2>
+    <table>
+      <tr><th>Feature</th><th>Formula</th><th>Meaning</th></tr>
+      <tr><td>Mean</td><td class="form">$\mu = \tfrac{1}{N}\sum x[n]$</td><td>DC offset / center of signal</td></tr>
+      <tr><td>Variance</td><td class="form">$\sigma^2 = \tfrac{1}{N}\sum (x[n]-\mu)^2$</td><td>Spread of vibration energy</td></tr>
+      <tr><td>Std deviation</td><td class="form">$\sigma = \sqrt{\sigma^2}$</td><td>Fluctuation magnitude</td></tr>
+      <tr><td>RMS</td><td class="form">$x_{rms} = \sqrt{\tfrac{1}{N}\sum x[n]^2}$</td><td><b>The standard vibration-severity metric (g-level)</b></td></tr>
+      <tr><td>Peak-to-peak</td><td class="form">$\max(x) - \min(x)$</td><td>Full swing amplitude</td></tr>
+      <tr><td>Mean absolute</td><td class="form">$\tfrac{1}{N}\sum |x[n]|$</td><td>Average magnitude</td></tr>
+      <tr><td>Energy</td><td class="form">$\sum x[n]^2$</td><td>Total signal power</td></tr>
+      <tr><td>Kurtosis</td><td class="form">$\dfrac{E[(x-\mu)^4]}{\sigma^4} - 3$</td><td><b>Spikiness</b> — impact faults push it above 3</td></tr>
+      <tr><td>Skewness</td><td class="form">$\dfrac{E[(x-\mu)^3]}{\sigma^3}$</td><td>Asymmetry of the distribution</td></tr>
+    </table>
+  </section>
+
+  <!-- 3. Dimensionless factors -->
+  <section>
+    <h2>3. Dimensionless Bearing-Diagnostic Factors <span class="tag">industry classics</span></h2>
+    <p>Scale-independent ratios used by vibration analysts — they grow when a fault makes the signal spiky:</p>
+    <table>
+      <tr><th>Factor</th><th>Formula</th><th>Catches</th></tr>
+      <tr><td>Crest factor</td><td class="form">$C = \dfrac{\max|x|}{x_{rms}}$</td><td>Spiky faults → high value</td></tr>
+      <tr><td>Shape factor</td><td class="form">$S = \dfrac{x_{rms}}{\tfrac{1}{N}\sum|x|}$</td><td>Waveform shape signature</td></tr>
+      <tr><td>Impulse factor</td><td class="form">$I = \dfrac{\max|x|}{\tfrac{1}{N}\sum|x|}$</td><td>Impulse-like impacts</td></tr>
+      <tr><td>Margin factor</td><td class="form">$M = \dfrac{\max|x|}{\left(\tfrac{1}{N}\sum\sqrt{|x|}\right)^2}$</td><td>Very sensitive to early defects</td></tr>
+    </table>
+  </section>
+
+  <!-- 4. Frequency domain -->
+  <section>
+    <h2>4. Frequency-Domain Features <span class="tag">from the FFT</span></h2>
+    <table>
+      <tr><th>Feature</th><th>Formula</th><th>Meaning</th></tr>
+      <tr><td>Magnitude spectrum</td><td class="form">$|X[k]| = \sqrt{\text{Re}^2 + \text{Im}^2}\,/N$</td><td>Amplitude of each frequency</td></tr>
+      <tr><td>FFT energy</td><td class="form">$\sum_k |X[k]|^2$</td><td>Total spectral power</td></tr>
+      <tr><td>Dominant frequency</td><td class="form">$\arg\max_k |X[k]|$</td><td>Where the machine rings loudest → RPM</td></tr>
+      <tr><td>Spectral entropy</td><td class="form">$-\sum_k p_k \log_2 p_k,\; p_k = \frac{|X[k]|^2}{\sum |X|^2}$</td><td>Spectrum randomness: healthy = one clean peak (low entropy); faults spread energy (high)</td></tr>
+      <tr><td>Spectral centroid</td><td class="form">$\dfrac{\sum_k k\,|X[k]|}{\sum_k |X[k]|}$</td><td>"Center of mass" of the spectrum</td></tr>
+    </table>
+  </section>
+
+  <!-- 5. Wavelet -->
+  <section>
+    <h2>5. Wavelet Decomposition — Daubechies-4, Level 4 <span class="tag">15 features</span></h2>
+    <p>The signal is passed through low-pass (approximation) and high-pass (detail) filters, downsampled at each level:</p>
+    <div class="formula">$$x[n] \;\longrightarrow\; \{\,cA_4,\; cD_4,\; cD_3,\; cD_2,\; cD_1\,\}$$</div>
+    <p>For each of the 5 coefficient sets we store <b>mean, std, and energy</b> → 15 features total.</p>
+    <p class="why"><b>Why it matters:</b> Fourier gives frequency <i>only</i>; wavelets give <i>frequency + time location</i> — they capture the brief "impact" transients of a chipped ball that the FFT smears across the spectrum.</p>
+  </section>
+
+  <!-- 6. BPFO -->
+  <section>
+    <h2>6. Bearing Fault Frequencies — BPFO <span class="tag">the physics</span></h2>
+    <p><b>Ball-Pass Frequency of the Outer race</b> — the rate at which balls pass a defect on the outer ring:</p>
+    <div class="formula">$$BPFO = \frac{n}{2}\, f_r \left(1 - \frac{d}{D}\cos\phi\right)$$</div>
+    <table>
+      <tr><th>Symbol</th><th>Meaning</th></tr>
+      <tr><td>$n$</td><td>number of balls</td></tr>
+      <tr><td>$f_r$</td><td>rotation frequency (Hz)</td></tr>
+      <tr><td>$d$</td><td>ball diameter</td></tr>
+      <tr><td>$D$</td><td>pitch diameter</td></tr>
+      <tr><td>$\phi$</td><td>contact angle</td></tr>
+    </table>
+    <p>For our bearing this lands at <b>~157 Hz</b> — so a spectral peak there means outer-race spalling. The dashboard's <b>BPFO score</b> is the real spectral energy ratio in the fault band (130–180 Hz):</p>
+    <div class="formula">$$BPFO_{score} = \frac{\sum_{f \in [130,180]} |X(f)|}{\sum_f |X(f)|}$$</div>
+    <div class="callout"><b>Judge line:</b> "A defect on the outer race makes the balls pass over it at a mathematically predictable rate — ~157 Hz for our bearing. When the FFT shows a peak there, the machine is telling us its outer race is spalled."</div>
+  </section>
+
+  <!-- 7. Derived DSP -->
+  <section>
+    <h2>7. Derived Values — deterministic DSP on the real signal</h2>
+    <table>
+      <tr><th>Value</th><th>Formula</th><th>Source</th></tr>
+      <tr><td>RPM</td><td class="form">$RPM = f_{dominant} \times 60$</td><td>real spectral peak → shaft speed</td></tr>
+      <tr><td>Health score</td><td class="form">$\begin{cases} 100 - c\!\times\!100 & \text{anomaly} \\ c\!\times\!100 & \text{healthy} \end{cases}$</td><td>directly from ML confidence $c$</td></tr>
+      <tr><td>Temperature</td><td class="form">$30 + RMS\!\times\!8 + (\text{kurt}>3.2?\,4:0) + (\text{critical?}\,8:0)$</td><td>thermal model from real features</td></tr>
+    </table>
+  </section>
+
+  <!-- 8. RUL -->
+  <section>
+    <h2>8. Remaining Useful Life — Linear Least-Squares Regression <span class="tag">routes/machines.ts</span></h2>
+    <p>Fit the real decay trend of stored health history, then project to the failure threshold:</p>
+    <div class="formula">$$\text{slope} = \frac{n\sum xy - \sum x \sum y}{n\sum x^2 - (\sum x)^2} \qquad \text{intercept} = \frac{\sum y - \text{slope}\sum x}{n}$$</div>
+    <div class="formula">$$\text{health}(t) = \text{intercept} + \text{slope}\cdot t \qquad \text{clamped to } [20, 100]$$</div>
+    <p class="why"><b>Why it matters:</b> slope is clamped to $[-1.2,\,0]$ so the model <b>never shows false recovery</b> — the projection only decays. Each machine gets its own trend from its own data; no hardcoded rates.</p>
+  </section>
+
+  <!-- 9. Simple metrics -->
+  <section>
+    <h2>9. Operational Metrics</h2>
+    <table>
+      <tr><th>Metric</th><th>Formula</th></tr>
+      <tr><td>Sensor uptime</td><td class="form">$\dfrac{\text{machines with reading in last 10 min}}{\text{total machines}} \times 100\%$</td></tr>
+      <tr><td>Fleet avg health</td><td class="form">$\text{mean of latest health score per spindle}$</td></tr>
+      <tr><td>ROI savings</td><td class="form">$C_{resolved}\!\times\!18{,}000 + W_{resolved}\!\times\!9{,}000$ (₹)</td></tr>
+    </table>
+  </section>
+
+  <!-- Script -->
+  <section>
+    <h2>🎤 60-Second Presentation Script</h2>
+    <div class="script">"Under the hood it's classic signal processing plus a trained classifier. We take 2048 vibration
+samples and run a Cooley–Tukey FFT — the butterfly algorithm, O(N log N) — to see the machine's
+frequency fingerprint. From time and frequency domains plus wavelet decomposition we extract ~37
+features: RMS, kurtosis for impact spikes, crest factor, spectral entropy, and the bearing fault
+frequencies like BPFO at 157 Hz. Those features feed our trained model, which outputs the fault
+and a confidence. Health comes straight from that confidence, and RUL is a least-squares regression
+of the health history projected to the failure threshold. The one-liner: Fourier + wavelets + a
+trained classifier — all live, all real."</div>
+  </section>
+
+  <div class="footer">SmartBearing · Hackathon Technical One-Pager · Print → Save as PDF for judges</div>
+</div>
+</body>
+</html>

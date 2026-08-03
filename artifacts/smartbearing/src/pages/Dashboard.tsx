@@ -25,7 +25,7 @@ export default function Dashboard() {
   });
   
   const fleetHealth = useCountUp(summary.avgHealthScore, 1500);
-  const dtSaved = useCountUp(summary.estimatedSavings ? 18 : 0, 1500);
+  const dtSaved = useCountUp(summary.downtimePrevented ?? 0, 1500);
   const liveSensors = useLiveSensors();
   
   const [chartData, setChartData] = useState<any[]>([]);
@@ -47,7 +47,8 @@ export default function Dashboard() {
         setAlerts(alertsRes.data.data);
         setSummary({
           ...summaryRes.data.data,
-          estimatedSavings: roiRes.data.data.estimatedSavings
+          estimatedSavings: roiRes.data.data.estimatedSavings,
+          downtimePrevented: roiRes.data.data.downtimePrevented
         });
         
         const top3 = machinesRes.data.data.slice(0, 3);
@@ -146,7 +147,7 @@ export default function Dashboard() {
               <span className="text-slate-400 ml-2">nodes active</span>
             </div>
             <div className="flex items-center gap-2 mt-4 text-xs text-slate-400">
-              <span className="w-2 h-2 rounded-full dot-healthy"></span> 100% Uptime
+              <span className="w-2 h-2 rounded-full dot-healthy"></span> {summary.sensorUptime ?? 0}% Uptime
             </div>
           </motion.div>
         </div>

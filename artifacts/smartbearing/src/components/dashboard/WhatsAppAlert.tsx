@@ -1,56 +1,82 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, MessageCircle, ExternalLink } from 'lucide-react';
+import { alertsApi } from '@/lib/api';
 
-const ALERTS = [
-  {
-    machine: 'Ring Frame #3',
-    id: 'M003',
-    time: 'Just now',
-    vibration: '3.84 g',
-    rul: '~6 hrs',
-    bpfo: '142.3 Hz',
-    message:
-      '⚠️ *CRITICAL BEARING ALERT*\n\nMachine: Ring Frame #3 (M003)\nVibration: 3.84 g RMS ↑↑\nBPFO Spike: 142.3 Hz\nEst. Time to Failure: ~6 hrs\n\nImmediate inspection required. Check lubrication and replace bearing by next shift.',
-  },
-  {
-    machine: 'Ring Frame #2',
-    id: 'M002',
-    time: '2 min ago',
-    vibration: '2.11 g',
-    rul: '~22 hrs',
-    bpfo: '89.7 Hz',
-    message:
-      '⚠️ *WARNING — Bearing Degradation*\n\nMachine: Ring Frame #2 (M002)\nVibration: 2.11 g RMS ↑\nBPFO Spike: 89.7 Hz\nEst. Time to Failure: ~22 hrs\n\nSchedule maintenance within next shift.',
-  },
-];
+type AlertData = {
+  machine: string;
+  id: string;
+  time: string;
+  vibration: string;
+  rul: string;
+  bpfo: string;
+  message: string;
+};
 
-type AlertIdx = 0 | 1;
+const ALERTS: AlertData[] = [];
 
 export default function WhatsAppAlert() {
   const [visible, setVisible] = useState(false);
-  const [alertIdx, setAlertIdx] = useState<AlertIdx>(0);
+  const [alertIdx, setAlertIdx] = useState(0);
   const [expanded, setExpanded] = useState(false);
   const [triggered, setTriggered] = useState(false);
+  const [alerts, setAlerts] = useState<AlertData[]>(ALERTS);
 
-  const show = useCallback((idx: AlertIdx) => {
+  const show = useCallback((idx: number) => {
     setAlertIdx(idx);
     setExpanded(false);
     setVisible(true);
   }, []);
 
-  // Auto-trigger after 5 seconds on first mount
+  // Pull the latest real alerts from the API (no hardcoded fake values)
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      try {
+        const res = await alertsApi.getAll({ status: 'active' });
+        const list = res.data.data || [];
+        if (!isMounted || list.length === 0) return;
+        const mapped: AlertData[] = list.slice(0, 2).map((a: any, i: number) => {
+          const vib = a.message?.match(/([\d.]+)\s*g/i);
+          return {
+            machine: a.machineName || a.machineId,
+            id: a.machineId,
+            time: i === 0 ? 'Just now' : 'Live',
+            vibration: vib ? `${vib[1]} g` : '—',
+            rul: a.estimatedTimeToFailure || '—',
+            bpfo: `${Math.round((a.anomalyScore || 0) * 100)}%`, // anomaly confidence
+            message:
+              `${a.type === 'CRITICAL' ? '⚠️ *CRITICAL BEARING ALERT*' : '⚠️ *WARNING — Bearing Degradation*'}\n\n` +
+              `Machine: ${a.machineName || a.machineId} (${a.machineId})\n` +
+              `Anomaly Score: ${(a.anomalyScore || 0).toFixed(2)}\n` +
+              `${a.message}\n` +
+              `Est. Time to Failure: ${a.estimatedTimeToFailure || '—'}\n\n` +
+              `${a.technicianSummary || 'Schedule inspection.'}`,
+          };
+        });
+        if (isMounted) setAlerts(mapped);
+      } catch (err) {
+        console.error(err);
+      }
+    })();
+    return () => { isMounted = false; };
+  }, []);
+
+  // Auto-trigger after 5 seconds on first mount if real alerts exist
   useEffect(() => {
     if (triggered) return;
+    if (alerts.length === 0) return;
     const t = setTimeout(() => {
       setTriggered(true);
       show(0);
     }, 5000);
     return () => clearTimeout(t);
-  }, [triggered, show]);
+  }, [triggered, show, alerts.length]);
 
-  const alert = ALERTS[alertIdx];
-  const isCritical = alertIdx === 0;
+  const alert = alerts[Math.min(alertIdx, alerts.length - 1)];
+  const isCritical = (alerts[alertIdx]?.message ?? '').includes('*CRITICAL*');
+
+  if (!alert) return null;
 
   return (
     <>
@@ -61,10 +87,10 @@ export default function WhatsAppAlert() {
         transition={{ delay: 1, type: 'spring' }}
         onClick={() => show(0)}
         className="fixed bottom-6 right-6 z-40 flex items-center gap-2 bg-[#25D366] hover:bg-[#1ebe5d] text-white text-xs font-bold px-4 py-2.5 rounded-full shadow-[0_4px_20px_rgba(37,211,102,0.35)] transition-colors"
-        title="Simulate WhatsApp alert"
+        title="WhatsApp alert"
       >
         <MessageCircle className="w-4 h-4" />
-        Simulate Alert
+        Alerts
       </motion.button>
 
       {/* Notification */}
@@ -162,17 +188,16 @@ export default function WhatsAppAlert() {
             </div>
 
             {/* Action buttons */}
-            <div className="flex border-t" style={{ borderColor: '#1F2C34' }}>
-              <button
-                onClick={() => {
-                  setVisible(false);
-                  show(alertIdx === 0 ? 1 : 0);
-                  setTimeout(() => setVisible(true), 300);
-                }}
-                className="flex-1 py-3 text-xs font-semibold text-[#8696A0] hover:text-white hover:bg-[#1F2C34] transition-colors"
-              >
-                Next alert
-              </button>
+            <div className="flex border-t" style={{ borderColor: '#1F2C34' }}>                <button
+                  onClick={() => {
+                    setVisible(false);
+                    show(alertIdx + 1 >= alerts.length ? 0 : alertIdx + 1);
+                    setTimeout(() => setVisible(true), 300);
+                  }}
+                  className="flex-1 py-3 text-xs font-semibold text-[#8696A0] hover:text-white hover:bg-[#1F2C34] transition-colors"
+                >
+                  Next alert
+                </button>
               <div className="w-px" style={{ background: '#1F2C34' }} />
               <button
                 onClick={() => setVisible(false)}

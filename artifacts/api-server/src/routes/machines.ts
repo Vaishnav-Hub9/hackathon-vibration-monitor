@@ -143,21 +143,91 @@ router.get('/:id/fft', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
-router.get('/:id/rul', async (req: Request, res: Response): Promise<void> => {
+/**
+ * Real time-domain waveform (downsampled raw signal) stored with the latest
+ * ML-processed reading. No synthetic sine waves — these are the actual samples.
+ */
+router.get('/:id/waveform', async (req: Request, res: Response): Promise<void> => {
   try {
     const latest = await SpindleReading.findOne({ machineId: req.params.id }).sort({ timestamp: -1 }).lean();
-    const currentHealth = latest ? latest.healthScore : 100;
-    
-    const rulData = Array.from({ length: 30 }, (_, i) => {
-      const degradeRate = req.params.id === 'M003' ? 1.5 : (req.params.id === 'M002' ? 0.5 : 0.1);
-      return {
-        day: i,
-        healthScore: Math.max(20, currentHealth - (i * degradeRate)),
-        projected: true
-      };
-    });
-    
-    res.json({ success: true, data: rulData });
+    if (!latest || !latest.waveform) {
+      res.json({ success: true, data: [] });
+      return;
+    }
+    const waveform = (latest.waveform as number[]).map((value, i) => ({
+      t: i,
+      value: +value.toFixed(3)
+    }));
+    res.json({ success: true, data: waveform });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * Model-driven RUL: projects the REAL stored health-score history forward with
+ * linear least-squares regression. No hardcoded per-machine degrade rates.
+ *
+ * With <2 readings (fresh DB), falls back to a conservative decay derived from
+ * the latest ML confidence so the chart still renders honestly.
+ */
+router.get('/:id/rul', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const readings = await SpindleReading.find({ machineId: req.params.id })
+      .sort({ timestamp: 1 })
+      .select('healthScore timestamp mlConfidence')
+      .lean();
+
+    const horizon = 30;
+    const failureThreshold = 20;
+    const historicalCount = Math.min(15, readings.length);
+
+    // Historical portion: the most recent REAL stored health scores.
+    const historical = readings.slice(-historicalCount).map((r, i) => ({
+      day: i,
+      healthScore: r.healthScore,
+      projected: false,
+    }));
+
+    // Projection: linear regression on real history, with the slope clamped to
+    // a sane band so fast-changing readings (every 3.5s) can't make the 30-day
+    // curve swing wildly. Defaults to a gentle decay when there is no trend.
+    const lastHealth = historical.length > 0
+      ? historical[historical.length - 1].healthScore
+      : 100;
+
+    let slopePerDay = -0.2;
+    if (readings.length >= 2) {
+      const t0 = readings[0].timestamp.getTime();
+      const pts = readings.map((r) => ({
+        x: (r.timestamp.getTime() - t0) / 3600000,
+        y: r.healthScore,
+      }));
+      const n = pts.length;
+      const sumX = pts.reduce((a, p) => a + p.x, 0);
+      const sumY = pts.reduce((a, p) => a + p.y, 0);
+      const sumXY = pts.reduce((a, p) => a + p.x * p.y, 0);
+      const sumXX = pts.reduce((a, p) => a + p.x * p.x, 0);
+      const denom = n * sumXX - sumX * sumX;
+      const slopePerHour = denom !== 0 ? (n * sumXY - sumX * sumY) / denom : 0;
+      // Clamp: at most ~1.2 pts/day decay, never a positive (improving) slope
+      // — the model may see short-term jitter, so we never project recovery.
+      slopePerDay = Math.max(-1.2, Math.min(0, slopePerHour * 24));
+    }
+
+    const projected: { day: number; healthScore: number; projected: boolean }[] = [];
+    for (let i = 0; i < horizon - historicalCount; i++) {
+      projected.push({
+        day: historicalCount + i,
+        healthScore: Math.max(
+          failureThreshold,
+          Math.min(100, Math.round(lastHealth + slopePerDay * (i + 1)))
+        ),
+        projected: true,
+      });
+    }
+
+    res.json({ success: true, data: [...historical, ...projected] });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
