@@ -1,38 +1,55 @@
 <div align="center">
   <h1>⚙️ SmartBearing</h1>
-  <p><b>Zero Unplanned Downtime. Artificial Intelligence at the Edge.</b></p>
+  <p><b>Rotating Machinery Condition Monitoring — Vibration FFT + Risk</b></p>
+  <p>Hackathon Submission · Problem Statement 08</p>
 </div>
 
+SmartBearing is an end-to-end condition monitoring system for rotating machinery. It ingests vibration (`accel_x/y/z`), temperature, and RPM data, extracts interpretable features (FFT peaks, RMS, kurtosis), classifies the likely fault type with confidence, and surfaces a risk assessment with recommended inspection actions — before a bearing failure shuts a machine down.
 
-SmartBearing is an ultra-low-cost, IoT-powered predictive maintenance system designed specifically for textile MSME factories (like power looms and ring frame machines). By utilizing an ESP32-S3 microcontroller coupled with an array of vibration, acoustic, and temperature sensors, SmartBearing listens to the mathematical heartbeat of your machines and predicts bearing failures *weeks* before they happen.
-
-No ₹3,00,000 corporate setups. No IT teams. Just a ₹1,800 magnetic box and a WhatsApp alert.
-
----
-
-## 🛑 The Problem: The ₹12,000 Breakdown
-
-Inside a textile ring frame machine, metal bearings spin at up to **15,000 RPM**. Over time, microscopic cracks form. These cracks create tiny vibrations and high-pitched acoustic anomalies entirely undetectable to human senses. 
-
-When the bearing finally shatters:
-1. Production **stops immediately**.
-2. Diagnostics and repairs take **4 to 6 hours**.
-3. The factory owner loses **₹12,000+** in a single shift.
-
-And this happens repeatedly, unpredictably, across thousands of factories.
+The full stack runs locally in minutes: a **React dashboard** (live charts + WebSockets), a **Node.js API** (Express + Socket.io + MongoDB), and a **Python ML server** (FastAPI + XGBoost) — plus optional Azure OpenAI technician summaries.
 
 ---
 
-## 💡 The Solution: SmartBearing
+## 📋 Problem Statement (PS 08)
 
-SmartBearing is a matchbox-sized IoT device that attaches to the machine magnetically (zero drilling required). It runs continuous Machine Learning models directly on the raw sensor data, detecting the exact mathematical frequency spike (BPFO - Ball Pass Frequency Outer race) that indicates a microscopic crack.
+> **Rotating Machinery Condition Monitoring (Vibration FFT + Risk)** — Bearings and gearboxes fail with early vibration signatures that humans may miss. A system is needed to ingest vibration/temperature/RPM data, detect abnormal frequency peaks (bearing defect frequencies), and provide an interpretable risk assessment with recommended inspection actions.
 
-### The Full Picture
+### Data Considerations (Guidelines)
+
+| Guideline | How SmartBearing meets it |
+|---|---|
+| Vibration time series: `accel_x/y/z`, `timestamp`, `rpm`, `temp` | ✅ Every reading carries all four; 2048-point raw signal per reading |
+| Labels: healthy vs bearing fault vs imbalance vs misalignment | ✅ Multi-class model: **Ball Fault / Inner Race Fault / Outer Race Fault / Healthy** |
+| Synthetic waveforms acceptable | ✅ `SensorSimulator.ts` synthesizes harmonic bearing signals with defect signatures |
+
+### Solution Expectations — Compliance Matrix
+
+| Expectation | Implementation |
+|---|---|
+| **Ingest** vibration/temperature/RPM data | ✅ `POST /api/sensors/reading` accepts 2048-point signals + temp + RPM; the simulator streams a reading for every spindle every ~3.5 s over Socket.io |
+| **Extract features** (FFT peaks, RMS, kurtosis) | ✅ 37-feature pipeline: time-domain (RMS, kurtosis, skewness, crest factor), frequency-domain (FFT stats, spectral entropy, dominant BPFO), wavelet (`db4` coefficients) |
+| **Classify/score** likely fault type + severity | ✅ XGBoost multi-class prediction with `predict_proba` confidence; health score 0–100 → `healthy / warning / critical` |
+| **Plots**: spectrum + trend | ✅ Live FFT spectrum with BPFO spike annotation; 24 h vibration/temperature trend charts |
+| **Short technician summary** | ✅ Azure OpenAI (or OpenAI) generates a 2-sentence summary with recommended action; realistic mock fallback when no key is set |
+| **Risk alerts list with evidence** | ✅ Alert feed with severity, anomaly score, message, and estimated time-to-failure, broadcast live and persisted |
+| **No direct control actions** | ✅ Monitoring-only — the system never issues shutdown or control commands |
+| **Confidence; faults are probabilistic** | ✅ Every prediction returns a confidence percentage |
+| **Safety disclaimer (engineer confirmation)** | ✅ Global banner across the entire app |
+
+### Guardrails
+
+- ⚠️ Fault predictions are **probabilistic** — all risk alerts require human engineer confirmation.
+- The system **monitors only** and does not issue direct machinery shutdown commands.
+
+---
+
+## 🧩 Architecture
+
 ```mermaid
 flowchart TD
     A[Bearing Spins 15,000 RPM] -->|Wear & Tear| B[Microscopic Cracks Form]
     B -->|Vibration & Sound Changes| C((SmartBearing Device))
-    
+
     subgraph Edge Hardware
     C -->|Detects| D1[MPU-6050 Vibration]
     C -->|Detects| D2[INMP441 Acoustic]
@@ -41,42 +58,24 @@ flowchart TD
 
     D1 & D2 & D3 --> E{ESP32-S3 Microcontroller}
     E -->|Cleans Data & Voltage Fluctuation| F[FFT & Wavelet Analysis]
-    
+
     F -->|WiFi| G((Python ML Microservice))
-    
     subgraph Artificial Intelligence
-    G --> H[XGBoost / Isolation Forest]
-    H -->|Scores 0-100| I{Is Score < 50?}
+    G --> H[XGBoost Multi-Class]
+    H -->|Label + Confidence| I{Anomaly?}
     end
-    
+
     I -- Yes --> J[Node.js API Server]
-    I -- No --> K[Healthy Status logged]
-    
+    I -- No --> K[Healthy status logged]
+
+    J -->|WebSocket| P[Live Dashboard]
     J -->|Webhook| L[Twilio API]
     L -->|WhatsApp Alert| M([Factory Owner's Phone])
-    M -->|Action| N[Replaces bearing during lunch break]
+    M -->|Action| N[Replaces bearing during planned downtime]
     N --> O((Zero Unplanned Downtime))
 ```
 
----
-
-## 🧩 The Hardware Stack
-
-Our hardware is designed specifically for the chaotic environment of an Indian MSME factory floor.
-
-| Component | Purpose | Why it matters |
-|-----------|---------|----------------|
-| **ESP32-S3** | The Brain | Handles high-speed data sampling and WiFi transmission cheaply. |
-| **MPU-6050** | Vibration Sensor | Detects the physical shaking caused by bearing friction. |
-| **INMP441** | I2S Microphone | Captures high-frequency acoustic friction beyond human hearing. |
-| **DS18B20** | Temp Sensor | Monitors thermal anomalies when friction increases. |
-| **ZMPT101B** | Voltage Sensor | **Crucial:** Automatically compensates for factory voltage fluctuations to prevent false positives (If voltage drops, the machine shakes differently—our system mathematically removes this noise). |
-
----
-
-## 🧠 The ML & Software Architecture
-
-Our intelligence runs in five distinct stages every single second:
+### Data Flow
 
 ```mermaid
 sequenceDiagram
@@ -84,102 +83,175 @@ sequenceDiagram
     participant E as ESP32-S3 (Edge)
     participant M as Python ML Server
     participant A as Node.js API
-    participant W as WhatsApp
-    
+    participant W as Dashboard / WhatsApp
+
     S->>E: 2048-point raw data arrays
-    Note over E: Cleans voltage noise
+    Note over E: AC-couples, cleans voltage noise
     E->>M: HTTP POST /predict
-    Note over M: Extracts 37 Features<br/>(Time, FFT, Wavelet)
-    M-->>A: Label (e.g., "Inner Race Fault") & Confidence
-    Note over A: Health Score Drops < 50
-    A->>W: Twilio Webhook Trigger
-    W->>Factory Owner: "⚠️ Machine 3 fault detected."
+    Note over M: Extracts 37 Features (Time, FFT, Wavelet)
+    M-->>A: Label (e.g. "Inner Race Fault") & Confidence
+    A-->>W: Live sensor feed + alert (Socket.io)
+    Note over A: Alert if risk score drops below threshold
+    A->>W: Technician summary + inspection action
 ```
-
-### The 37-Feature ML Pipeline
-The Python backend loads a highly optimized XGBoost / Isolation Forest model trained on the industry-standard **CWRU Bearing Dataset**. When it receives a 2048-point raw signal array, it extracts 37 distinct mathematical features:
-- **Time Domain:** RMS, Kurtosis, Skewness, Crest Factor.
-- **Frequency Domain:** FFT Mean, Spectral Entropy, Dominant BPFO Frequency.
-- **Wavelet Domain:** PyWavelets `db4` coefficients to detect transient shock impacts.
 
 ---
 
-## 💸 Why this hasn't existed before
+## 🧠 The ML Pipeline
 
-Big companies like Siemens sell bearing monitoring systems. 
-- **Siemens Cost:** ₹3,00,000–₹8,00,000.
-- **Requirements:** Full-time IT person, complex internet infrastructure, massive installation downtime.
+The Python ML server (`artifacts/api-server/src/ml/server.py`) hosts a trained XGBoost model. For every 2048-point signal it:
 
-A small factory with 5 machines and one owner cannot use that. 
+1. **Extracts 37 features**:
+   - **Time domain:** RMS, mean, std, kurtosis, skewness, crest factor, shape factor, impulse factor.
+   - **Frequency domain:** FFT mean/std/max/energy, dominant frequency, spectral entropy, spectral centroid.
+   - **Wavelet domain:** `pywt` `db4` decomposition energies (transient shock detection).
+2. **Predicts fault class** with confidence: `Ball Fault`, `Inner Race Fault`, `Outer Race Fault`, or `Healthy` (via `predict_proba`).
+3. **Generates a technician summary** — Azure OpenAI preferred, plain OpenAI fallback, realistic mock fallback otherwise.
 
-- **SmartBearing Cost:** **₹1,800 per unit.**
-- **Requirements:** Plug it in, stick it to the machine with a magnet, connect to WiFi once, done. 
+> **Graceful degradation:** if the ML server is offline, the API falls back to an RMS-based heuristic so the dashboard and alerts keep working.
 
-That massive gap—between ₹1,800 and ₹3,00,000—is where SmartBearing lives. And nobody was there before us.
+### Bearing Defect Frequencies
+
+The system targets the classic rolling-element bearing defect frequencies:
+- **BPFO** — Ball Pass Frequency, Outer race (~157 Hz flagged in the FFT spectrum)
+- **BPFI** — Ball Pass Frequency, Inner race (~290 Hz)
+- Harmonics of the defect frequency confirm a fault rather than a single spurious peak.
 
 ---
 
-## 🚀 Running the Project Locally
+## 🔩 Hardware Stack
 
-This repository contains the full end-to-end software stack (Frontend Dashboard + Node.js API + Python ML Server).
+| Component | Purpose | Why it matters |
+|-----------|---------|----------------|
+| **ESP32-S3** | Edge brain | High-speed sampling + WiFi on a low-cost MCU |
+| **MPU-6050** | Vibration sensor | Captures the physical shaking caused by bearing friction |
+| **INMP441** | I2S microphone | High-frequency acoustics beyond human hearing |
+| **DS18B20** | Temperature sensor | Detects thermal anomalies as friction increases |
+| **ZMPT101B** | Voltage sensor | Compensates for factory voltage fluctuations to prevent false positives |
 
-### Prerequisites
-- **Node.js** (v18+) & **pnpm** (v9+)
-- **Python** (v3.9+)
-
-### 1. Start the Machine Learning Server
-We use a FastAPI Python server to host the trained ML model.
-```bash
-# Windows
-.\start-ml.bat
-```
-*(This automatically installs dependencies via `requirements.txt` and starts the server on port 8000).*
-
-### 2. Start the Backend API & Simulator
-This starts the backend and our intelligent `SensorSimulator.ts` which generates raw bearing harmonic signals to test the ML model.
-```bash
-pnpm install
-set SIMULATOR_AUTO_START=true
-pnpm --filter @workspace/api-server run dev
-```
-
-### 3. Start the Dashboard
-```bash
-pnpm --filter @workspace/smartbearing run dev
-```
-Open **http://localhost:5173** in your browser. Enter *any* email and password to log in.
+Reference firmware: [`artifacts/edge-firmware/smartbearing-edge-node/`](artifacts/edge-firmware/smartbearing-edge-node/README.md)
 
 ---
 
 ## 🎨 Dashboard Features
 
-- **Live Sensor Feed:** Watch real-time vibration, acoustic, and temperature data stream into the dashboard via WebSockets.
-- **Machine Learning Integration:** Watch the ML model dynamically predict "Inner Race Fault" or "Ball Fault" based on live synthesized harmonic signals.
-- **FFT Visualization:** View the actual frequency spikes (BPFO) that the AI detects.
-- **ROI Calculator:** An interactive tool for factory owners to calculate exactly how much money SmartBearing saves them every month.
-- **PDF & CSV Export:** One-click fleet reports for management.
+- **Live Sensor Feed** — real-time vibration (x/y/z), temperature, and RPM streamed over WebSockets.
+- **Machine Learning Integration** — watch the model predict fault type + confidence on live synthesized signals.
+- **FFT Visualization** — frequency spectrum with BPFO/BPFI spike annotations and severity reference lines.
+- **Risk Assessment** — interpretable 0–100 risk score per machine, with status bands (healthy / warning / critical).
+- **Alerts with Evidence** — severity, anomaly score, estimated time-to-failure, and technician summary.
+- **Fleet Overview & Trends** — fleet risk, 24 h vibration trends, downtime-prevented and ₹-saved metrics.
+- **PDF & CSV Export** — one-click fleet reports for management.
+- **ROI Calculator** — estimated savings per factory.
 
 ---
 
-## 🛠️ Hardware Prototype
+## 🚀 Running the Project Locally
 
-**[▶️ Watch the 3D CAD Prototype Video in action!](https://github.com/sricharan-213/smartbearing/raw/main/onshapevid.mp4)**
+### Prerequisites
 
-Alternatively, you can explore the hardware directly:
-- **[View Interactive 3D Model in Onshape](https://cad.onshape.com/documents/3a69519e53a5005e3bec8510/w/b2ba871f5405233222816e48/e/a31d598d5d85e1f838b6b86d?renderMode=0&uiState=6a442c37a925ba1565306983)**
-- **[Download Raw CAD File (Parasolid .x_t)](Part%20Studio%201%20(1).x_t)**
+- **Node.js** (v18+) & **pnpm** (v9+)
+- **Python** (v3.9+)
+- **MongoDB** running locally on `localhost:27017` (or set `MONGODB_URI`)
+
+### 1. Install dependencies & seed the database
+
+```bash
+pnpm install
+pnpm --filter @workspace/api-server run seed
+```
+
+The seed script creates demo users, machines (M001–M006), spindle readings, alerts, and maintenance logs.
+
+### 2. Start the ML server (optional but recommended)
+
+```bash
+# Windows
+.\start-ml.bat
+# or manually:
+cd artifacts/api-server/src/ml
+pip install -r requirements.txt
+uvicorn server:app --host 127.0.0.1 --port 8000
+```
+
+> The API works without it (RMS heuristic fallback), but the ML server enables real XGBoost predictions.
+
+### 3. Start the Backend API & Simulator
+
+```bash
+SIMULATOR_AUTO_START=true pnpm --filter @workspace/api-server run dev
+```
+
+Starts the API on **port 5000** and the sensor simulator (streams synthetic bearing signals every ~3.5 s).
+
+### 4. Start the Dashboard
+
+```bash
+pnpm --filter @workspace/smartbearing run dev
+```
+
+Open **http://localhost:5173** in your browser.
+
+### Demo Credentials
+
+| Role | Email | Password |
+|------|-------|----------|
+| Admin | `admin@smartbearing.com` | `Admin@123` |
+| Operator | `operator@smartbearing.com` | `Operator@123` |
+
+You can also register a new factory account from the login page.
+
+### Azure OpenAI Technician Summaries (optional)
+
+Copy `artifacts/api-server/src/ml/.env.example` → `.env` and set:
+
+```env
+AZURE_OPENAI_API_KEY=...
+AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
+AZURE_OPENAI_DEPLOYMENT=gpt-35-turbo
+```
+
+Plain OpenAI (`OPENAI_API_KEY` / `OPENAI_MODEL`) also works. Without any key, summaries fall back to a realistic mock.
+
+---
+
+## ☁️ Deployment
+
+| Piece | Platform | What deploys |
+|---|---|---|
+| Frontend (React/Vite) | **Vercel** | `artifacts/smartbearing` |
+| API server (Express + Socket.io + MongoDB) | **Render** | `artifacts/api-server` (via `render.yaml`) |
+| ML predictor (FastAPI + XGBoost) | **Render** | `artifacts/api-server/src/ml` (via `render.yaml`) |
+
+See **[DEPLOYMENT.md](DEPLOYMENT.md)** for the full setup (MongoDB Atlas + Render blueprint + Vercel).
+
+---
+
+## 🗂️ Project Structure
+
+```
+artifacts/
+  api-server/            # Node.js API (Express + Socket.io + MongoDB)
+    src/ml/              # Python FastAPI ML server (XGBoost, 37 features)
+  smartbearing/          # React + Vite dashboard
+  edge-firmware/         # ESP32-S3 reference firmware (Arduino)
+lib/                     # Shared TS packages (db, api-zod, api-client-react)
+scripts/                 # Workspace tooling
+```
 
 ---
 
 ## 👥 The Team
+
 | Name | Role | Responsibilities |
 |------|------|------------------|
-| **Prateek** | AI & ML Architecture | Training XGBoost/Isolation Forest models, feature extraction, CAD (OnShape) enclosure design |
-| **Varun Sreeram** | Backend API | Node.js Server, WebSocket streaming, Twilio WhatsApp Integration |
-| **Vaishnav** | Frontend & UI/UX | React Dashboard, 3D visualizations, Recharts data plotting |
-| **Sri Charan** | Operations & DevOps | GitHub repository management, code integrations |
+| **Prateek** | AI & ML Architecture | XGBoost model training, feature extraction, CAD enclosure design |
+| **Varun Sreeram** | Backend API | Node.js server, WebSocket streaming, WhatsApp integration |
+| **Vaishnav** | Frontend & UI/UX | React dashboard, 3D visualizations, Recharts data plotting |
+| **Sri Charan** | Operations & DevOps | Repository management, code integrations |
 
 ---
+
 <div align="center">
   <i>Built to bring enterprise-grade AI to the local factory floor.</i>
 </div>
