@@ -52,3 +52,10 @@ export const maintenanceApi = {
   getAll: () => api.get('/maintenance'),
   create: (data: any) => api.post('/maintenance', data)
 };
+
+export const simulatorApi = {
+  start: () => api.post('/simulator/start'),
+  stop: () => api.post('/simulator/stop'),
+  injectFault: (machineId: string, faultType: string) =>
+    api.post('/simulator/inject-fault', { machineId, faultType })
+};

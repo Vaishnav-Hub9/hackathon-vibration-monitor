@@ -216,11 +216,18 @@ class SensorSimulator {
   }
 
   public async injectFault(machineId: string, faultType?: string): Promise<void> {
-    await Machine.updateOne(
-      { machineId },
-      { $set: { status: 'critical', ...(faultType ? { faultProfile: faultType } : {}) } }
-    );
-    if (faultType) {
+    // 'Healthy' clears the fault back to a clean baseline; any other type
+    // flags the machine critical with that fault profile so the next cycle
+    // synthesizes the matching signature and the REAL model classifies it.
+    const status = !faultType || faultType === 'Healthy' ? 'healthy' : 'critical';
+    const update: any = { $set: { status } };
+    if (faultType && faultType !== 'Healthy') {
+      update.$set.faultProfile = faultType;
+    } else {
+      update.$unset = { faultProfile: 1 };
+    }
+    await Machine.updateOne({ machineId }, update);
+    if (faultType && faultType !== 'Healthy') {
       console.log(`Injected ${faultType} fault on ${machineId}`);
     }
   }

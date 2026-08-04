@@ -228,6 +228,7 @@ export default function MachineDetail() {
               healthScore={machine.healthScore}
               liveData={liveData}
               fftData={fftData}
+              faultLabel={machine.mlLabel}
             />
           </TabsContent>
 

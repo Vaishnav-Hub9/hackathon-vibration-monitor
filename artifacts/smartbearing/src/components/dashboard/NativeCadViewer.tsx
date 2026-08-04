@@ -1,5 +1,5 @@
-import { Component, Suspense, useMemo, useState, type ReactNode } from 'react';
-import { Canvas, useLoader } from '@react-three/fiber';
+import { Component, Suspense, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Canvas, useFrame, useLoader } from '@react-three/fiber';
 import { OrbitControls, ContactShadows, Bounds } from '@react-three/drei';
 import * as THREE from 'three';
 import { Eye, EyeOff } from 'lucide-react';
@@ -40,10 +40,24 @@ class CadErrorBoundary extends Component<{ children: ReactNode }, { failed: bool
   }
 }
 
+// Maps the trained model's fault classes onto the named CAD parts so the
+// viewer can point at the exact broken component. The 6 classes match
+// label_encoder.pkl: Healthy, Imbalance, Misalignment, Ball, Inner Race, Outer Race.
+export const faultLabelToPart = (label?: string | null): string | null => {
+  if (!label || label === 'Healthy') return null;
+  if (label === 'Inner Race') return 'Inner Race';
+  if (label === 'Outer Race') return 'Outer Race';
+  if (label === 'Ball') return 'Rolling Element';
+  // Imbalance / Misalignment are rotor-shaft faults — no single bearing part.
+  return null;
+};
+
 interface NativeCadViewerProps {
   parts: CadPart[];
   live?: Record<string, PartLive>;
   autoRotate?: boolean;
+  /** Live ML fault label — the matching part pulses red + gets a FAULT badge. */
+  faultLabel?: string | null;
 }
 
 export const healthTone = (health: number) =>
@@ -77,8 +91,11 @@ const glowIntensity = (health: number) => (health < 40 ? 0.55 : health < 70 ? 0.
  * When `live` readings are supplied, each part's color heat-maps to its
  * health and the legend chips stream the current temperature / vibration.
  */
-export default function NativeCadViewer({ parts, live, autoRotate = false }: NativeCadViewerProps) {
+export default function NativeCadViewer({ parts, live, autoRotate = false, faultLabel = null }: NativeCadViewerProps) {
   const [hidden, setHidden] = useState<Set<string>>(new Set());
+
+  // The faulty part name resolved from the live ML verdict — pulses red in 3D.
+  const faultPart = useMemo(() => faultLabelToPart(faultLabel), [faultLabel]);
 
   const visible = parts.filter((p) => !hidden.has(p.url));
 
@@ -112,7 +129,12 @@ export default function NativeCadViewer({ parts, live, autoRotate = false }: Nat
             {visible.length > 0 && (
               <Bounds fit clip margin={1.25}>
                 {visible.map((p) => (
-                  <PartMesh key={p.url} part={p} live={live?.[p.url]} />
+                  <PartMesh
+                    key={p.url}
+                    part={p}
+                    live={live?.[p.url]}
+                    fault={faultPart !== null && p.name === faultPart}
+                  />
                 ))}
               </Bounds>
             )}
@@ -143,7 +165,9 @@ export default function NativeCadViewer({ parts, live, autoRotate = false }: Nat
                 className={`rounded-lg border text-[11px] font-medium backdrop-blur-sm transition-all px-2.5 py-1.5 ${
                   off
                     ? 'border-navy bg-[#0A0E1A]/70 text-slate-500 opacity-60'
-                    : 'border-navy bg-[#0A0E1A]/85 text-slate-200 hover:border-slate-500 hover:bg-[#0F1629]'
+                    : faultPart !== null && p.name === faultPart
+                      ? 'border-[#EF4444]/60 bg-[#EF4444]/15 text-red-300'
+                      : 'border-navy bg-[#0A0E1A]/85 text-slate-200 hover:border-slate-500 hover:bg-[#0F1629]'
                 }`}
                 title={off ? `Show ${p.name}` : `Hide ${p.name}`}
               >
@@ -153,7 +177,12 @@ export default function NativeCadViewer({ parts, live, autoRotate = false }: Nat
                     style={{ backgroundColor: off ? '#334155' : tone }}
                   />
                   <span className="truncate">{p.name}</span>
-                  {off ? (
+                  {faultPart !== null && p.name === faultPart && !off && (
+                    <span className="ml-auto flex-shrink-0 text-[8px] font-bold tracking-wider px-1.5 py-0.5 rounded bg-[#EF4444] text-white animate-pulse">
+                      FAULT
+                    </span>
+                  )}
+                  {faultPart !== null && p.name === faultPart && off ? null : off ? (
                     <EyeOff className="w-3 h-3 ml-auto flex-shrink-0" />
                   ) : (
                     <Eye className="w-3 h-3 ml-auto flex-shrink-0" />
@@ -185,23 +214,41 @@ export default function NativeCadViewer({ parts, live, autoRotate = false }: Nat
 // Select the loader by extension in the parent so each branch calls exactly
 // one unconditional hook (a single Model component with a conditional
 // useLoader violates the Rules of Hooks and would fire both loaders).
-function PartMesh({ part, live }: { part: CadPart; live?: PartLive }) {
+function PartMesh({ part, live, fault }: { part: CadPart; live?: PartLive; fault?: boolean }) {
   return /\.stl$/i.test(part.url) ? (
-    <StlModel url={part.url} color={part.color} live={live} />
+    <StlModel url={part.url} color={part.color} live={live} fault={fault} />
   ) : (
-    <GltfModel url={part.url} color={part.color} live={live} />
+    <GltfModel url={part.url} color={part.color} live={live} fault={fault} />
   );
 }
 
-function StlModel({ url, color, live }: { url: string; color: string; live?: PartLive }) {
+// Pulses the faulty part's red glow so the eye is drawn to the broken
+// component while the fault is live.
+function useFaultPulse(fault: boolean | undefined, baseGlow: number) {
+  const matRef = useRef<THREE.MeshStandardMaterial>(null);
+  useFrame(({ clock }) => {
+    const m = matRef.current;
+    if (!m) return;
+    if (fault) {
+      m.emissiveIntensity = 0.7 + Math.sin(clock.elapsedTime * 7) * 0.45;
+    } else {
+      m.emissiveIntensity = baseGlow;
+    }
+  });
+  return matRef;
+}
+
+function StlModel({ url, color, live, fault }: { url: string; color: string; live?: PartLive; fault?: boolean }) {
   const geometry = useLoader(STLLoader, url);
   geometry.computeVertexNormals();
   const health = live?.health ?? 100;
   const matColor = useMemo(() => heatColor(color, health), [color, health]);
   const emissive = useMemo(() => glowIntensity(health), [health]);
+  const matRef = useFaultPulse(fault, emissive);
   return (
     <mesh geometry={geometry} castShadow>
       <meshStandardMaterial
+        ref={matRef}
         color={matColor}
         emissive="#ff2d2d"
         emissiveIntensity={emissive}
@@ -212,11 +259,12 @@ function StlModel({ url, color, live }: { url: string; color: string; live?: Par
   );
 }
 
-function GltfModel({ url, color, live }: { url: string; color: string; live?: PartLive }) {
+function GltfModel({ url, color, live, fault }: { url: string; color: string; live?: PartLive; fault?: boolean }) {
   const gltf = useLoader(GLTFLoader, url);
   const health = live?.health ?? 100;
   const matColor = useMemo(() => heatColor(color, health), [color, health]);
   const emissive = useMemo(() => glowIntensity(health), [health]);
+  const matRef = useFaultPulse(fault, emissive);
   return (
     <primitive
       object={gltf.scene}
@@ -228,7 +276,7 @@ function GltfModel({ url, color, live }: { url: string; color: string; live?: Pa
             if (m && m.isMeshStandardMaterial) {
               m.color.set(matColor);
               m.emissive.set('#ff2d2d');
-              m.emissiveIntensity = emissive;
+              matRef.current = m;
             }
           }
         });

@@ -11,6 +11,7 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, Re
 import { Activity, Clock, Cpu, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import WhatsAppAlert from '@/components/dashboard/WhatsAppAlert';
+import FaultInjector from '@/components/dashboard/FaultInjector';
 
 export default function Dashboard() {
   const [, setLocation] = useLocation();
@@ -98,6 +99,10 @@ export default function Dashboard() {
   }, []);
 
   const allSensors = liveSensors.slice(0, 6);
+
+  // Fault Injector targets the first machine; pass its live ML verdict from the socket feed
+  const injectorMachine = machines[0];
+  const injectorSensor = liveSensors.find(s => s.machineId === injectorMachine?.id);
 
   return (
     <DashLayout>
@@ -197,6 +202,15 @@ export default function Dashboard() {
             })}
           </div>
         </div>
+
+        {/* Fault Injector — live ML demo panel */}
+        {injectorMachine && (
+          <FaultInjector
+            machineId={injectorMachine.id}
+            mlLabel={injectorSensor?.mlLabel}
+            mlConfidence={injectorSensor?.mlConfidence}
+          />
+        )}
 
         {/* Row 2: Machines Grid */}
         <h2 className="font-display text-lg font-semibold text-white pt-2">Machine Status</h2>

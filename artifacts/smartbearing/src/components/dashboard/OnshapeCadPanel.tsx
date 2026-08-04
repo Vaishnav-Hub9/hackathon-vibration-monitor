@@ -46,6 +46,8 @@ interface OnshapeCadPanelProps {
   healthScore: number;
   liveData: any;
   fftData: any[];
+  /** Live ML fault label — the matching CAD part pulses red. */
+  faultLabel?: string | null;
 }
 
 export default function OnshapeCadPanel({
@@ -55,6 +57,7 @@ export default function OnshapeCadPanel({
   healthScore,
   liveData,
   fftData,
+  faultLabel = null,
 }: OnshapeCadPanelProps) {
   const [embedAttempted, setEmbedAttempted] = useState(false);
   const [parts, setParts] = useState<CadPart[] | null>(null);
@@ -243,7 +246,7 @@ export default function OnshapeCadPanel({
 
           <div className="relative h-[420px] bg-[#0A0E1A]">
             {parts ? (
-              <NativeCadViewer parts={parts} live={partLive} />
+              <NativeCadViewer parts={parts} live={partLive} faultLabel={faultLabel} />
             ) : probeState === 'checking' ? (
               <div className="absolute inset-0 flex items-center justify-center bg-[#0A0E1A]">
                 <div className="text-center px-6">
