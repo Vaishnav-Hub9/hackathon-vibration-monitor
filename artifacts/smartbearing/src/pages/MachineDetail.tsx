@@ -8,6 +8,41 @@ import { ChevronRight, Cpu, Activity, Zap, Thermometer, Radio } from 'lucide-rea
 import { machinesApi, alertsApi } from '@/lib/api';
 import { useLiveSensors } from '@/hooks/useLiveSensors';
 import OnshapeCadPanel from '@/components/dashboard/OnshapeCadPanel';
+import { computeDefectFrequencies, buildFrequencyOverlays, defectFormulaStrings } from '@/lib/defectFrequencies';
+
+// Per-fault diagnostics driven by the real ML label (not hardcoded)
+const FAULT_INFO: Record<string, { name: string; desc: string; action: string }> = {
+  'Outer Race': {
+    name: 'Outer Race Defect (BPFO)',
+    desc: 'High amplitude peaks at the ball pass frequency outer race (BPFO) and its harmonics indicate spalling on the outer ring.',
+    action: 'Schedule bearing replacement within 18 hours.',
+  },
+  'Inner Race': {
+    name: 'Inner Race Defect (BPFI)',
+    desc: 'High amplitude peaks at the ball pass frequency inner race (BPFI) indicate a defect on the rotating inner ring.',
+    action: 'Schedule immediate manual inspection of the inner race surface.',
+  },
+  Ball: {
+    name: 'Ball Element Defect (BSF)',
+    desc: 'Elevated energy at the ball spin frequency (BSF) points to pitting or flat spots on the rolling elements.',
+    action: 'Check ball bearings for pitting and wear during next maintenance window.',
+  },
+  Imbalance: {
+    name: 'Rotor Imbalance (1× RPM)',
+    desc: 'Dominant peak at exactly 1× the running speed (fᵣ = RPM/60) indicates mass imbalance on the rotating assembly.',
+    action: 'Schedule rotor balancing; verify mass distribution before further operation.',
+  },
+  Misalignment: {
+    name: 'Shaft Misalignment (2× RPM)',
+    desc: 'Strong spectral peak at 2× the running speed is the classic signature of parallel/angular misalignment.',
+    action: 'Realign coupling and verify shaft straightness.',
+  },
+  Healthy: {
+    name: 'Healthy Operation',
+    desc: 'No significant energy at any bearing defect frequency. Spectrum is consistent with normal operation.',
+    action: 'No immediate inspection required. Continue routine monitoring.',
+  },
+};
 
 export default function MachineDetail() {
   const params = useParams();
@@ -89,6 +124,22 @@ export default function MachineDetail() {
       { subject: 'Anomaly', A: +(liveData.anomalyScore * 100).toFixed(0), fullMark: 100 },
     ];
   }, [liveData]);
+
+  // Bearing defect-frequency overlays computed from live RPM + geometry
+  const rpm = liveData?.rpm || machine?.rpm || 14400;
+  const defectLines = useMemo(() => buildFrequencyOverlays(rpm), [rpm]);
+  const faultInfo = useMemo(() => {
+    const label = machine?.mlLabel;
+    if (!label || label === 'Healthy') return null;
+    return FAULT_INFO[label] || null;
+  }, [machine?.mlLabel]);
+
+  // Dynamic waveform Y-domain so strong fault amplitudes never clip
+  const waveformDomain = useMemo(() => {
+    if (!waveformData.length) return [-2, 2];
+    const maxAbs = Math.max(0.5, ...waveformData.map((d: any) => Math.abs(d.value ?? 0)));
+    return [-maxAbs * 1.2, maxAbs * 1.2];
+  }, [waveformData]);
 
   if (!machine) return <DashLayout><div className="text-white p-6">Loading machine data...</div></DashLayout>;
 
@@ -224,37 +275,46 @@ export default function MachineDetail() {
             <div className="grid lg:grid-cols-3 gap-6">
               <div className="lg:col-span-2 bg-navy-card border border-navy p-5 rounded-xl h-80">
                 <div className="flex justify-between items-center mb-4">
-                  <h3 className="font-semibold text-white">Frequency Spectrum (FFT)</h3>
+                  <h3 className="font-semibold text-white">Frequency Spectrum (FFT) with Defect Frequencies</h3>
                   <span className="text-xs font-mono-data text-amber bg-amber/10 px-2 py-1 rounded border border-amber/20">Live Update</span>
                 </div>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={fftData} margin={{top:20}}>
-                    <XAxis dataKey="freq" stroke="#64748B" fontSize={10} tickFormatter={(val) => `${val}Hz`} />
+                    <XAxis dataKey="freq" stroke="#64748B" fontSize={10} tickFormatter={(val) => `${val}Hz`} domain={[0, 2000]} />
                     <YAxis stroke="#64748B" fontSize={10} />
                     <Tooltip cursor={{fill: '#1E2D4A'}} contentStyle={{ backgroundColor: '#0F1629', borderColor: '#1E2D4A', color: '#fff' }} />
-                    <Bar dataKey="amplitude" fill="#3B82F6" radius={[2,2,0,0]} isAnimationActive={false}>
+                    <Bar dataKey="amplitude" radius={[2,2,0,0]} isAnimationActive={false}>
                       {
-                        fftData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.amplitude > 0.7 ? '#EA580C' : '#3B82F6'} />
-                        ))
+                        fftData.map((entry, index) => {
+                          // Highlight bins sitting on a bearing defect frequency (±15 Hz)
+                          const onDefect = defectLines.some(l => Math.abs(entry.freq - l.freq) < 15 && !l.label.startsWith('1×') && !l.label.startsWith('2×') && !l.label.startsWith('3×'));
+                          return <Cell key={`cell-${index}`} fill={onDefect ? '#EA580C' : entry.amplitude > 0.7 ? '#F59E0B' : '#3B82F6'} />;
+                        })
                       }
                     </Bar>
-                    {machine.status === 'critical' && <ReferenceLine x={157} stroke="#EA580C" strokeDasharray="3 3" label={{ position: 'top', value: 'BPFO Spike', fill: '#EA580C', fontSize: 12, fontWeight: 'bold' }} />}
+                    {defectLines.map(l => (
+                      <ReferenceLine key={`${l.label}-${l.freq}`} x={l.freq} stroke={l.color} strokeDasharray="3 3" strokeWidth={l.label.includes('×') ? 1 : 1.5} label={{ position: 'top', value: l.label, fill: l.color, fontSize: 9, fontWeight: 'bold' }} />
+                    ))}
                   </BarChart>
                 </ResponsiveContainer>
               </div>
 
               <div className="bg-navy-card border border-navy p-5 rounded-xl">
                 <h3 className="font-semibold text-white mb-4">Diagnostics</h3>
-                {machine.status === 'critical' ? (
+                {faultInfo ? (
                   <div className="space-y-4">
                     <div className="bg-[#EA580C]/10 border border-[#EA580C]/30 p-4 rounded-lg">
-                      <div className="font-bold text-[#EA580C] mb-1">Outer Race Defect (BPFO)</div>
-                      <p className="text-sm text-slate-300">High amplitude peaks detected at ball pass frequency outer race harmonics (~157Hz). Indicates severe spalling on the outer ring.</p>
+                      <div className="font-bold text-[#EA580C] mb-1">{faultInfo.name}</div>
+                      <p className="text-sm text-slate-300">{faultInfo.desc}</p>
+                      {machine.mlLabel && machine.mlConfidence != null && (
+                        <p className="text-xs font-mono-data text-amber mt-2">
+                          ML verdict: {machine.mlLabel} · {(machine.mlConfidence * 100).toFixed(1)}% confidence
+                        </p>
+                      )}
                     </div>
                     <ul className="text-sm text-slate-400 space-y-2 list-disc pl-4">
-                      <li>Recommended action: Schedule replacement within 18 hours.</li>
-                      <li>Secondary indicator: Elevated temperature.</li>
+                      <li>Recommended action: {faultInfo.action}</li>
+                      <li>Peak at {liveData?.rpm ? computeDefectFrequencies(liveData.rpm).bpfo.toFixed(0) : '—'} Hz = BPFO @ {liveData?.rpm || '—'} RPM</li>
                     </ul>
                   </div>
                 ) : (
@@ -266,12 +326,28 @@ export default function MachineDetail() {
               </div>
             </div>
 
+            <div className="bg-navy-card border border-navy p-5 rounded-xl">
+              <h3 className="font-semibold text-white mb-4">Bearing Defect Frequency Calculator</h3>
+              <p className="text-xs text-slate-500 mb-4 font-mono-data">
+                Geometry: 9 balls · D = 39.04 mm · d = 7.94 mm · α = 0° (6205 class) @ {liveData?.rpm || '14,400'} RPM
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                {defectFormulaStrings(liveData?.rpm || 14400).map(f => (
+                  <div key={f.key} className="bg-[#0A0E1A] border border-navy rounded-lg p-3">
+                    <div className="text-xs font-bold text-slate-300 mb-1">{f.name}</div>
+                    <div className="font-mono-data text-lg font-bold text-white">{f.valueHz} <span className="text-xs text-slate-500">Hz</span></div>
+                    <div className="text-[10px] text-slate-500 font-mono-data mt-1 leading-relaxed">{f.formula}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             <div className="bg-navy-card border border-navy p-5 rounded-xl h-64">
               <h3 className="font-semibold text-white mb-4">Time Waveform</h3>
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={waveformData}>
                   <XAxis dataKey="t" stroke="#64748B" tick={false} axisLine={false} />
-                  <YAxis stroke="#64748B" tick={false} axisLine={false} domain={[-2, 2]} />
+                  <YAxis stroke="#64748B" tick={false} axisLine={false} domain={waveformDomain} />
                   <Line type="monotone" dataKey="value" stroke={machine.status === 'critical' ? '#EA580C' : '#10B981'} strokeWidth={1} dot={false} isAnimationActive={false} />
                 </LineChart>
               </ResponsiveContainer>

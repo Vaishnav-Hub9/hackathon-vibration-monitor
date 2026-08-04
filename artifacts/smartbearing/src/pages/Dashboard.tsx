@@ -186,6 +186,9 @@ export default function Dashboard() {
                     <DeltaIcon className="w-3 h-3 flex-shrink-0" style={{ color: deltaColor }} />
                   </div>
                   <div className="text-[11px] text-slate-400 font-mono-data">{s.temperature}°C</div>
+                  {s.mlLabel && s.mlLabel !== 'Healthy' && (
+                    <div className="text-[10px] font-semibold mt-0.5 text-[#EA580C]">{s.mlLabel.toUpperCase()}</div>
+                  )}
                   <div className={`text-[10px] font-semibold mt-0.5 ${
                     s.status === 'critical' ? 'text-[#EA580C]' : s.status === 'warning' ? 'text-[#F59E0B]' : 'text-[#10B981]'
                   }`}>{s.status.toUpperCase()}</div>

@@ -6,7 +6,7 @@ This repo is wired for **permanent, auto-updating** hosting:
 |---|---|---|
 | Frontend (React/Vite app) | **Vercel** | `artifacts/smartbearing` |
 | API server (Express + Socket.io + MongoDB) | **Render** | `artifacts/api-server` (via `render.yaml`) |
-| ML predictor (FastAPI + XGBoost) | **Render** | `artifacts/api-server/src/ml` (via `render.yaml`) |
+| ML predictor (FastAPI + scikit-learn) | **Render** | `artifacts/api-server/src/ml` (via `render.yaml`) |
 
 Every push to `main` automatically redeploys **all three** — no manual steps after setup.
 

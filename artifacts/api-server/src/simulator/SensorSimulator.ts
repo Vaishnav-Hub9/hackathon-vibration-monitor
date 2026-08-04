@@ -19,8 +19,55 @@ interface MLFeatures {
   crest_factor?: number;
   spectral_entropy?: number;
   dominant_frequency?: number;
+  band_1x?: number;
+  band_2x?: number;
+  band_bpfo?: number;
+  band_bpfi?: number;
+  band_bsf?: number;
   [key: string]: number | undefined;
 }
+
+export interface DefectFrequencies {
+  fr: number;
+  bpfo: number;
+  bpfi: number;
+  bsf: number;
+  ftf: number;
+}
+
+export interface AlertEvidence {
+  label: string;
+  confidence: number;
+  dominantFreq: number;
+  rpm: number;
+  peaks: { freq: number; amplitude: number }[];
+  features: { rms: number; kurtosis: number; crestFactor: number };
+  defectFrequencies: DefectFrequencies;
+}
+
+// 6205-class deep-groove ball bearing (matches the ML training geometry)
+export const BEARING_GEOMETRY = {
+  balls: 9,
+  pitchDiameter: 39.04,
+  ballDiameter: 7.94,
+  contactAngle: 0,
+};
+
+export function defectFrequencies(rpm: number, g = BEARING_GEOMETRY): DefectFrequencies {
+  const fr = rpm / 60;
+  const c = Math.cos((g.contactAngle * Math.PI) / 180);
+  const ratio = g.ballDiameter / g.pitchDiameter;
+  return {
+    fr,
+    bpfo: (g.balls / 2) * fr * (1 - ratio * c),
+    bpfi: (g.balls / 2) * fr * (1 + ratio * c),
+    bsf: (g.pitchDiameter / (2 * g.ballDiameter)) * fr * (1 - (ratio * c) ** 2),
+    ftf: (fr / 2) * (1 - ratio * c),
+  };
+}
+
+const SAMPLE_RATE = 4000; // Hz — Nyquist 2000 Hz covers BPFO/BPFI at 14.4k RPM
+const SPINDLE_RPM = 14400;
 
 /**
  * Deterministic statistics of the raw AC-coupled signal. These are real
@@ -54,6 +101,101 @@ function signalStats(signal: Float64Array) {
   };
 }
 
+/**
+ * Synthesize a 2048-sample vibration window whose spectral signature matches
+ * the fault class the ML model was trained on. Defect frequencies are computed
+ * from real bearing geometry × RPM — not magic numbers.
+ */
+function synthesizeSignal(faultLabel: string, severity: number, rpm: number): Float64Array {
+  const df = defectFrequencies(rpm);
+  const n = 2048;
+  const signal = new Float64Array(n);
+  const t = (s: number) => s / SAMPLE_RATE;
+  const rng = () => Math.random() - 0.5;
+  const tone = (freq: number, amp: number, phase: number) =>
+    (s: number) => amp * Math.sin(2 * Math.PI * freq * t(s) + phase);
+
+  // Every machine has a small 1x fundamental (rotor)
+  const comps: ((s: number) => number)[] = [tone(df.fr, 0.35 * severity, rng() * Math.PI)];
+
+  if (faultLabel === 'Imbalance') {
+    comps.push(tone(df.fr, 1.6 * severity, rng() * Math.PI));
+    comps.push(tone(2 * df.fr, 0.15 * severity, rng() * Math.PI));
+  } else if (faultLabel === 'Misalignment') {
+    comps.push(tone(df.fr, 0.5 * severity, rng() * Math.PI));
+    comps.push(tone(2 * df.fr, 1.8 * severity, rng() * Math.PI));
+    comps.push(tone(4 * df.fr, 0.3 * severity, rng() * Math.PI));
+  } else if (faultLabel === 'Outer Race') {
+    for (const h of [1, 2, 3]) comps.push(tone(df.bpfo * h, (1.3 / h) * severity, rng() * Math.PI));
+    comps.push(tone(df.fr, 0.2 * severity, rng() * Math.PI));
+  } else if (faultLabel === 'Inner Race') {
+    for (const h of [1, 2, 3]) comps.push(tone(df.bpfi * h, (1.3 / h) * severity, rng() * Math.PI));
+    comps.push(tone(df.fr, 0.25 * severity, rng() * Math.PI));
+  } else if (faultLabel === 'Ball') {
+    for (const h of [1, 2, 3]) comps.push(tone(df.bsf * h, (1.3 / h) * severity, rng() * Math.PI));
+    comps.push(tone(df.fr, 0.2 * severity, rng() * Math.PI));
+  }
+
+  for (let s = 0; s < n; s++) {
+    let v = rng() * 0.1; // broadband noise floor
+    for (const c of comps) v += c(s);
+    signal[s] = v;
+  }
+  return signal;
+}
+
+/** Which fault the machine's profile implies (falls back to status-based mapping). */
+function faultForMachine(machine: any): string {
+  if (machine.faultProfile) return machine.faultProfile;
+  if (machine.status === 'critical') return 'Outer Race';
+  if (machine.status === 'warning') {
+    // Spread the demo across classes: M002 imbalance, M006 misalignment, else ball
+    if (machine.machineId === 'M002') return 'Imbalance';
+    if (machine.machineId === 'M006') return 'Misalignment';
+    return 'Ball';
+  }
+  return 'Healthy';
+}
+
+/**
+ * Deterministic DSP fallback classifier — used only when the ML server is
+ * offline. Computes real band-energy ratios at the bearing defect frequencies
+ * (1x/2x RPM, BPFO/BPFI/BSF + harmonics) from the actual FFT of the signal.
+ * No fabricated values; it is the same physics the ML model learns.
+ */
+function classifyDSP(signal: number[], rpm: number): { label: string; confidence: number; bpfoScore: number } {
+  const df = defectFrequencies(rpm);
+  const fft = computeFFTBins(signal, SAMPLE_RATE, 256);
+  let total = 0;
+  for (const b of fft) total += b.amplitude;
+  if (total === 0) return { label: 'Healthy', confidence: 0.5, bpfoScore: 0 };
+
+  const bandRatio = (center: number) => {
+    let e = 0;
+    for (const b of fft) {
+      for (const h of [1, 2, 3]) {
+        const lo = center * h * 0.92;
+        const hi = center * h * 1.08;
+        if (b.freq >= lo && b.freq <= hi) e += b.amplitude;
+      }
+    }
+    return e / total;
+  };
+
+  const bands: [string, number][] = [
+    ['Imbalance', bandRatio(df.fr)],
+    ['Misalignment', bandRatio(2 * df.fr)],
+    ['Outer Race', bandRatio(df.bpfo)],
+    ['Inner Race', bandRatio(df.bpfi)],
+    ['Ball', bandRatio(df.bsf)],
+  ];
+  bands.sort((a, b) => b[1] - a[1]);
+  const [topLabel, topRatio] = bands[0];
+  const label = topRatio < 0.28 ? 'Healthy' : topLabel;
+  const confidence = label === 'Healthy' ? 0.5 + topRatio : Math.min(0.97, 0.45 + topRatio * 0.7);
+  return { label, confidence: +confidence.toFixed(3), bpfoScore: +Math.min(1, bandRatio(df.bpfo)).toFixed(3) };
+}
+
 class SensorSimulator {
   private intervalId: NodeJS.Timeout | null = null;
   private intervalMs = 3500;
@@ -73,8 +215,14 @@ class SensorSimulator {
     }
   }
 
-  public async injectFault(machineId: string): Promise<void> {
-    await Machine.updateOne({ machineId }, { $set: { status: 'critical' } });
+  public async injectFault(machineId: string, faultType?: string): Promise<void> {
+    await Machine.updateOne(
+      { machineId },
+      { $set: { status: 'critical', ...(faultType ? { faultProfile: faultType } : {}) } }
+    );
+    if (faultType) {
+      console.log(`Injected ${faultType} fault on ${machineId}`);
+    }
   }
 
   private emitMlStatus(online: boolean): void {
@@ -95,26 +243,13 @@ class SensorSimulator {
         for (let i = 1; i <= 5; i++) {
           const spindleId = `SN00${i}`;
 
-          // ---- Raw 2048-point signal (this is the simulated sensor input) ----
-          // Fault content is driven by the machine status set by fault injection,
-          // exactly like a real bearing's signature. Everything *displayed* is
-          // then computed from this signal by the ML model + DSP below.
-          const faultAmp =
-            machine.status === 'critical' ? 4.0 :
-            machine.status === 'warning' ? 1.5 : 0;
-          const baseAmp =
-            machine.status === 'critical' ? 2.4 :
-            machine.status === 'warning' ? 1.3 :
-            machine.status === 'degrading' ? 1.0 : 0.45;
-
-          const signal = new Float64Array(2048);
-          for (let s = 0; s < 2048; s++) {
-            let v = Math.sin(s * 0.1) * baseAmp + (Math.random() - 0.5) * 0.1;
-            if (faultAmp > 0 && s % 100 < 5) {
-              v += faultAmp * (Math.random() + 0.5);
-            }
-            signal[s] = v;
-          }
+          // ---- Fault signature synthesis (real bearing defect frequencies) ----
+          const intendedFault = faultForMachine(machine);
+          const severity =
+            machine.status === 'critical' ? 2.2 :
+            machine.status === 'warning' ? 1.2 :
+            machine.status === 'degrading' ? 0.9 : 0.6;
+          const signal = synthesizeSignal(intendedFault, severity, SPINDLE_RPM);
 
           // ---- Real ML inference (the actual trained model) ----
           let mlLabel = '';
@@ -127,7 +262,11 @@ class SensorSimulator {
             const res = await fetch(`${mlServerUrl}/predict`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ signal: Array.from(signal) }),
+              body: JSON.stringify({
+                signal: Array.from(signal),
+                rpm: SPINDLE_RPM,
+                sample_rate: SAMPLE_RATE,
+              }),
             });
             if (res.ok) {
               const mlData = (await res.json()) as {
@@ -145,32 +284,32 @@ class SensorSimulator {
               }
             }
           } catch (e) {
-            // ML server unreachable — handled below, never fabricate predictions
+            // ML server unreachable — fall through to DSP classifier below
           }
 
-          if (!mlOk) {
+          if (mlOk) {
+            this.emitMlStatus(true);
+          } else {
+            // Deterministic DSP fallback keeps the demo live without the ML server
             this.emitMlStatus(false);
-            continue; // No ML verdict → no fabricated reading is saved
+            const dsp = classifyDSP(Array.from(signal), SPINDLE_RPM);
+            mlLabel = dsp.label;
+            mlConfidence = dsp.confidence;
+            mlOk = true; // a real, computed verdict — not fabricated
           }
-          this.emitMlStatus(true);
 
           const anomalyFlag = mlLabel !== 'Healthy';
 
           // ---- Deterministic DSP on the real signal (no random values) ----
           const stats = signalStats(signal);
-          const vibrationFFT = computeFFTBins(Array.from(signal), 1000, 128);
+          const vibrationFFT = computeFFTBins(Array.from(signal), SAMPLE_RATE, 128);
 
           // Accel channels: real statistics of the actual AC-coupled signal (g)
           const accel_z = +stats.rms.toFixed(3);
           const accel_x = +stats.std.toFixed(3);
           const accel_y = +stats.meanAbs.toFixed(3);
 
-          // RPM: derived from the real dominant spectral peak (1x rotation)
-          let dominantFreq = 0;
-          for (const bin of vibrationFFT) {
-            if (bin.amplitude > dominantFreq) dominantFreq = bin.freq;
-          }
-          const rpm = Math.round(dominantFreq * 60);
+          const rpm = SPINDLE_RPM;
 
           // Temperature: deterministic thermal model from real signal energy
           const rms = features.rms ?? stats.rms;
@@ -179,12 +318,13 @@ class SensorSimulator {
             30 + rms * 8 + (kurt > 3.2 ? 4 : 0) + (machine.status === 'critical' ? 8 : 0)
           ).toFixed(1);
 
-          // BPFO score: real spectral energy ratio in the bearing fault band
+          // BPFO score: real spectral energy ratio at the computed BPFO band
+          const df = defectFrequencies(rpm);
           let bpfoBandEnergy = 0;
           let totalEnergy = 0;
           for (const bin of vibrationFFT) {
             totalEnergy += bin.amplitude;
-            if (bin.freq >= 130 && bin.freq <= 180) bpfoBandEnergy += bin.amplitude;
+            if (bin.freq >= df.bpfo * 0.8 && bin.freq <= df.bpfo * 1.2) bpfoBandEnergy += bin.amplitude;
           }
           const bpfoScore = +(totalEnergy > 0 ? Math.min(1, bpfoBandEnergy / totalEnergy) : 0).toFixed(3);
 
@@ -218,7 +358,7 @@ class SensorSimulator {
           });
           await reading.save();
 
-          // ---- Alerts: real ML verdict, real bpfo score ----
+          // ---- Alerts: real ML verdict + defect-frequency evidence pack ----
           if (finalHealthScore < 70) {
             const severity = finalHealthScore < 40 ? 'critical' : 'warning';
             const existingAlert = await Alert.findOne({ machineId: machine.machineId, spindleId, status: 'active' });
@@ -230,6 +370,20 @@ class SensorSimulator {
                 await existingAlert.save();
               }
 
+              const evidence: AlertEvidence = {
+                label: mlLabel,
+                confidence: +mlConfidence.toFixed(3),
+                dominantFreq: features.dominant_frequency ?? df.fr,
+                rpm,
+                peaks: [...vibrationFFT].sort((a, b) => b.amplitude - a.amplitude).slice(0, 5).map(p => ({ freq: +p.freq.toFixed(1), amplitude: +p.amplitude.toFixed(3) })),
+                features: {
+                  rms: +rms.toFixed(3),
+                  kurtosis: +kurt.toFixed(2),
+                  crestFactor: +(stats.peak / (stats.rms || 1)).toFixed(2),
+                },
+                defectFrequencies: df,
+              };
+
               const newAlert = new Alert({
                 machineId: machine.machineId,
                 spindleId,
@@ -240,6 +394,7 @@ class SensorSimulator {
                   : 'Vibration elevated. Monitor closely.',
                 technicianSummary,
                 anomalyScore: bpfoScore,
+                evidence,
               });
               await newAlert.save();
 
@@ -254,6 +409,7 @@ class SensorSimulator {
                   message: newAlertObj.message,
                   technicianSummary: newAlertObj.technicianSummary,
                   anomalyScore: bpfoScore,
+                  evidence,
                   timestamp: newAlertObj.detectedAt.toISOString().replace('T', ' ').substring(0, 19),
                   status: newAlertObj.status,
                   estimatedTimeToFailure: severity === 'critical' ? '6-18 hours' : '3-7 days'

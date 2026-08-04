@@ -7,6 +7,7 @@ import { SpindleReading } from '../models/SpindleReading.js';
 import { Alert } from '../models/Alert.js';
 import { MaintenanceLog } from '../models/MaintenanceLog.js';
 import { computeFFTBins } from '../lib/fft.js';
+import { defectFrequencies } from '../simulator/SensorSimulator.js';
 
 dotenv.config();
 
@@ -37,11 +38,11 @@ async function seed(): Promise<void> {
 
     const machinesData = [
       { machineId: 'M001', name: 'Ring Frame #1', location: 'Sircilla, Telangana', section: 'Main', totalSpindles: 400, status: 'healthy', installedAt: new Date(), lastMaintenance: new Date() },
-      { machineId: 'M002', name: 'Ring Frame #2', location: 'Sircilla, Telangana', section: 'Main', totalSpindles: 400, status: 'warning', installedAt: new Date(), lastMaintenance: new Date() },
-      { machineId: 'M003', name: 'Ring Frame #3', location: 'Sircilla, Telangana', section: 'Main', totalSpindles: 320, status: 'critical', installedAt: new Date(), lastMaintenance: new Date() },
+      { machineId: 'M002', name: 'Ring Frame #2', location: 'Sircilla, Telangana', section: 'Main', totalSpindles: 400, status: 'warning', faultProfile: 'Imbalance', installedAt: new Date(), lastMaintenance: new Date() },
+      { machineId: 'M003', name: 'Ring Frame #3', location: 'Sircilla, Telangana', section: 'Main', totalSpindles: 320, status: 'critical', faultProfile: 'Outer Race', installedAt: new Date(), lastMaintenance: new Date() },
       { machineId: 'M004', name: 'Ring Frame #4', location: 'Sircilla, Telangana', section: 'Main', totalSpindles: 400, status: 'healthy', installedAt: new Date(), lastMaintenance: new Date() },
-      { machineId: 'M005', name: 'Winding Machine #1', location: 'Sircilla, Telangana', section: 'Winding', totalSpindles: 120, status: 'healthy', installedAt: new Date(), lastMaintenance: new Date() },
-      { machineId: 'M006', name: 'Ring Frame #5', location: 'Factory Unit B', section: 'Main', totalSpindles: 400, status: 'warning', installedAt: new Date(), lastMaintenance: new Date() }
+      { machineId: 'M005', name: 'Winding Machine #1', location: 'Sircilla, Telangana', section: 'Winding', totalSpindles: 120, status: 'warning', faultProfile: 'Ball', installedAt: new Date(), lastMaintenance: new Date() },
+      { machineId: 'M006', name: 'Ring Frame #5', location: 'Factory Unit B', section: 'Main', totalSpindles: 400, status: 'warning', faultProfile: 'Misalignment', installedAt: new Date(), lastMaintenance: new Date() }
     ];
 
     await Machine.insertMany(machinesData);
@@ -83,7 +84,9 @@ async function seed(): Promise<void> {
           bpfoScore: machine.status === 'critical' ? 0.8 : machine.status === 'warning' ? 0.4 : 0.1,
           healthScore: healthBase,
           anomalyFlag: anomaly,
-          mlLabel: anomaly ? 'Outer Race Fault' : 'Healthy',
+          // Labels match the 6-class model (Healthy / Imbalance / Misalignment /
+          // Ball / Inner Race / Outer Race). Critical -> Outer Race defect.
+          mlLabel: machine.status === 'critical' ? 'Outer Race' : machine.status === 'warning' ? (machine.machineId === 'M002' ? 'Imbalance' : machine.machineId === 'M006' ? 'Misalignment' : 'Ball') : 'Healthy',
           mlConfidence: anomaly ? 0.9 : 0.98,
           waveform: sig.filter((_, k) => k % 8 === 0),
           source: 'simulator'
@@ -92,10 +95,45 @@ async function seed(): Promise<void> {
     }
     console.log('Seeded initial spindle readings');
 
+    const df = defectFrequencies(14200);
+
     await Alert.create([
-      { machineId: 'M003', spindleId: 'SN001', severity: 'critical', type: 'CRITICAL', message: 'BPFO frequency spike detected.', status: 'active' },
-      { machineId: 'M002', spindleId: 'SN002', severity: 'warning', type: 'WARNING', message: 'Vibration RMS elevated.', status: 'active' },
-      { machineId: 'M006', spindleId: 'SN003', severity: 'warning', type: 'WARNING', message: 'Temperature anomaly detected.', status: 'active' }
+      {
+        machineId: 'M003', spindleId: 'SN001', severity: 'critical', type: 'CRITICAL',
+        message: 'Outer Race detected with 90.0% confidence.', status: 'active',
+        technicianSummary: 'High spectral energy at BPFO (~847 Hz) with 90.0% probability of Outer Race wear. Recommended Action: Schedule bearing replacement within 18 hours.',
+        anomalyScore: 0.8,
+        evidence: {
+          label: 'Outer Race', confidence: 0.9, dominantFreq: 847.0, rpm: 14200,
+          peaks: [{ freq: 847.0, amplitude: 1.2 }, { freq: 1694.0, amplitude: 0.6 }, { freq: 254.0, amplitude: 0.35 }, { freq: 508.0, amplitude: 0.2 }, { freq: 1185.0, amplitude: 0.18 }],
+          features: { rms: 3.1, kurtosis: 4.2, crestFactor: 4.8 },
+          defectFrequencies: df
+        }
+      },
+      {
+        machineId: 'M002', spindleId: 'SN002', severity: 'warning', type: 'WARNING',
+        message: 'Imbalance detected with 85.0% confidence.', status: 'active',
+        technicianSummary: 'Dominant spectral peak at 1x RPM indicates rotor imbalance. Recommended Action: Schedule rotor balancing.',
+        anomalyScore: 0.4,
+        evidence: {
+          label: 'Imbalance', confidence: 0.85, dominantFreq: 236.7, rpm: 14200,
+          peaks: [{ freq: 236.7, amplitude: 1.0 }, { freq: 473.3, amplitude: 0.15 }, { freq: 710.0, amplitude: 0.1 }, { freq: 94.0, amplitude: 0.08 }, { freq: 1185.0, amplitude: 0.06 }],
+          features: { rms: 1.9, kurtosis: 3.1, crestFactor: 3.2 },
+          defectFrequencies: df
+        }
+      },
+      {
+        machineId: 'M006', spindleId: 'SN003', severity: 'warning', type: 'WARNING',
+        message: 'Misalignment detected with 82.0% confidence.', status: 'active',
+        technicianSummary: 'Strong spectral peak at 2x RPM (473 Hz) indicates shaft misalignment. Recommended Action: Realign coupling and verify shaft straightness.',
+        anomalyScore: 0.42,
+        evidence: {
+          label: 'Misalignment', confidence: 0.82, dominantFreq: 473.3, rpm: 14200,
+          peaks: [{ freq: 473.3, amplitude: 1.1 }, { freq: 236.7, amplitude: 0.5 }, { freq: 946.7, amplitude: 0.3 }, { freq: 118.3, amplitude: 0.15 }, { freq: 700.0, amplitude: 0.1 }],
+          features: { rms: 2.1, kurtosis: 3.3, crestFactor: 3.6 },
+          defectFrequencies: df
+        }
+      }
     ]);
     console.log('Seeded alerts');
 

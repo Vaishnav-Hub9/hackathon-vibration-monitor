@@ -6,7 +6,7 @@
 
 SmartBearing is an end-to-end condition monitoring system for rotating machinery. It ingests vibration (`accel_x/y/z`), temperature, and RPM data, extracts interpretable features (FFT peaks, RMS, kurtosis), classifies the likely fault type with confidence, and surfaces a risk assessment with recommended inspection actions — before a bearing failure shuts a machine down.
 
-The full stack runs locally in minutes: a **React dashboard** (live charts + WebSockets), a **Node.js API** (Express + Socket.io + MongoDB), and a **Python ML server** (FastAPI + XGBoost) — plus optional Azure OpenAI technician summaries.
+The full stack runs locally in minutes: a **React dashboard** (live charts + WebSockets), a **Node.js API** (Express + Socket.io + MongoDB), and a **Python ML server** (FastAPI + scikit-learn Gradient Boosting) — plus optional Azure OpenAI technician summaries.
 
 ---
 
@@ -19,19 +19,20 @@ The full stack runs locally in minutes: a **React dashboard** (live charts + Web
 | Guideline | How SmartBearing meets it |
 |---|---|
 | Vibration time series: `accel_x/y/z`, `timestamp`, `rpm`, `temp` | ✅ Every reading carries all four; 2048-point raw signal per reading |
-| Labels: healthy vs bearing fault vs imbalance vs misalignment | ✅ Multi-class model: **Ball Fault / Inner Race Fault / Outer Race Fault / Healthy** |
-| Synthetic waveforms acceptable | ✅ `SensorSimulator.ts` synthesizes harmonic bearing signals with defect signatures |
+| Labels: healthy vs bearing fault vs imbalance vs misalignment | ✅ 6-class model: **Healthy / Imbalance / Misalignment / Ball / Inner Race / Outer Race** |
+| Synthetic waveforms acceptable | ✅ `SensorSimulator.ts` + `train_model.py` synthesize spectral signatures for every class (1×/2× RPM, BPFO/BPFI/BSF harmonics) |
 
 ### Solution Expectations — Compliance Matrix
 
 | Expectation | Implementation |
 |---|---|
 | **Ingest** vibration/temperature/RPM data | ✅ `POST /api/sensors/reading` accepts 2048-point signals + temp + RPM; the simulator streams a reading for every spindle every ~3.5 s over Socket.io |
-| **Extract features** (FFT peaks, RMS, kurtosis) | ✅ 37-feature pipeline: time-domain (RMS, kurtosis, skewness, crest factor), frequency-domain (FFT stats, spectral entropy, dominant BPFO), wavelet (`db4` coefficients) |
-| **Classify/score** likely fault type + severity | ✅ XGBoost multi-class prediction with `predict_proba` confidence; health score 0–100 → `healthy / warning / critical` |
-| **Plots**: spectrum + trend | ✅ Live FFT spectrum with BPFO spike annotation; 24 h vibration/temperature trend charts |
+| **Extract features** (FFT peaks, RMS, kurtosis) | ✅ 29-feature pipeline: time-domain (RMS, kurtosis, skewness, crest factor), frequency-domain (FFT stats, spectral entropy, centroid), plus **defect-frequency band-energy ratios** (1×/2× RPM, BPFO/BPFI/BSF/FTF + harmonics) |
+| **Classify/score** likely fault type + severity | ✅ scikit-learn Gradient Boosting 6-class prediction with `predict_proba` confidence + full probability vector; health score 0–100 → `healthy / warning / critical` |
+| **Detect abnormal frequency peaks (bearing defect frequencies)** | ✅ BPFO/BPFI/BSF/FTF computed from bearing geometry × live RPM — overlaid on the spectrum with harmonics, with an in-app calculator showing the math |
+| **Plots**: spectrum + trend | ✅ Live FFT spectrum with defect-frequency ReferenceLines + harmonics; 24 h vibration/temperature trend charts |
 | **Short technician summary** | ✅ Azure OpenAI (or OpenAI) generates a 2-sentence summary with recommended action; realistic mock fallback when no key is set |
-| **Risk alerts list with evidence** | ✅ Alert feed with severity, anomaly score, message, and estimated time-to-failure, broadcast live and persisted |
+| **Risk alerts list with evidence** | ✅ Every alert carries an **evidence pack**: triggering spectrum peaks, RMS/kurtosis/crest-factor, confidence, RPM and defect frequencies — expandable in the Alert Center |
 | **No direct control actions** | ✅ Monitoring-only — the system never issues shutdown or control commands |
 | **Confidence; faults are probabilistic** | ✅ Every prediction returns a confidence percentage |
 | **Safety disclaimer (engineer confirmation)** | ✅ Global banner across the entire app |
@@ -61,7 +62,7 @@ flowchart TD
 
     F -->|WiFi| G((Python ML Microservice))
     subgraph Artificial Intelligence
-    G --> H[XGBoost Multi-Class]
+    G --> H[Gradient Boosting 6-Class]
     H -->|Label + Confidence| I{Anomaly?}
     end
 
@@ -87,9 +88,9 @@ sequenceDiagram
 
     S->>E: 2048-point raw data arrays
     Note over E: AC-couples, cleans voltage noise
-    E->>M: HTTP POST /predict
-    Note over M: Extracts 37 Features (Time, FFT, Wavelet)
-    M-->>A: Label (e.g. "Inner Race Fault") & Confidence
+    E->>M: HTTP POST /predict (signal + rpm)
+    Note over M: Extracts 29 Features (Time, FFT, Defect-Freq Bands)
+    M-->>A: Label (e.g. "Imbalance") & Confidence + Evidence
     A-->>W: Live sensor feed + alert (Socket.io)
     Note over A: Alert if risk score drops below threshold
     A->>W: Technician summary + inspection action
@@ -99,23 +100,34 @@ sequenceDiagram
 
 ## 🧠 The ML Pipeline
 
-The Python ML server (`artifacts/api-server/src/ml/server.py`) hosts a trained XGBoost model. For every 2048-point signal it:
+The Python ML server (`artifacts/api-server/src/ml/server.py`) hosts a trained scikit-learn Gradient Boosting model. Training data is synthesized in `train_model.py` with the exact spectral signatures of each fault class. For every 2048-point signal it:
 
-1. **Extracts 37 features**:
+1. **Extracts 29 features** (shared `features.py` — used identically by training & inference):
    - **Time domain:** RMS, mean, std, kurtosis, skewness, crest factor, shape factor, impulse factor.
-   - **Frequency domain:** FFT mean/std/max/energy, dominant frequency, spectral entropy, spectral centroid.
-   - **Wavelet domain:** `pywt` `db4` decomposition energies (transient shock detection).
-2. **Predicts fault class** with confidence: `Ball Fault`, `Inner Race Fault`, `Outer Race Fault`, or `Healthy` (via `predict_proba`).
-3. **Generates a technician summary** — Azure OpenAI preferred, plain OpenAI fallback, realistic mock fallback otherwise.
+   - **Frequency domain:** FFT mean/std/max/energy, dominant frequency + amplitude, spectral entropy, spectral centroid.
+   - **Defect-frequency bands:** spectral-energy ratios at 1×/2× RPM, BPFO, BPFI, BSF, FTF + harmonics — computed from bearing geometry × live RPM.
+2. **Predicts fault class** with confidence + full probability vector: `Healthy`, `Imbalance`, `Misalignment`, `Ball`, `Inner Race`, or `Outer Race`.
+3. **Returns defect frequencies + evidence** and generates a technician summary — Azure OpenAI preferred, plain OpenAI fallback, realistic mock fallback otherwise.
 
-> **Graceful degradation:** if the ML server is offline, the API falls back to an RMS-based heuristic so the dashboard and alerts keep working.
+> **Graceful degradation:** if the ML server is offline, the simulator runs a deterministic DSP fallback that computes the same band-energy ratios from the real FFT — the dashboard and alerts keep working with genuinely computed verdicts, never fabricated ones.
+
+### Retraining
+
+```bash
+cd artifacts/api-server/src/ml
+python train_model.py   # synthesizes 6 classes, trains, saves smartline_final.pkl + label_encoder.pkl
+```
 
 ### Bearing Defect Frequencies
 
-The system targets the classic rolling-element bearing defect frequencies:
-- **BPFO** — Ball Pass Frequency, Outer race (~157 Hz flagged in the FFT spectrum)
-- **BPFI** — Ball Pass Frequency, Inner race (~290 Hz)
-- Harmonics of the defect frequency confirm a fault rather than a single spurious peak.
+The system computes the classic rolling-element defect frequencies from geometry + live RPM (`lib/defectFrequencies.ts` frontend / `features.py` backend) and overlays them with harmonics on every spectrum:
+
+- **BPFO** — Ball Pass Frequency, Outer race: `(N/2)·fᵣ·(1 − d/D·cos α)`
+- **BPFI** — Ball Pass Frequency, Inner race: `(N/2)·fᵣ·(1 + d/D·cos α)`
+- **BSF** — Ball Spin Frequency: `(D/2d)·fᵣ·(1 − (d/D·cos α)²)`
+- **FTF** — Fundamental Train Frequency: `(fᵣ/2)·(1 − d/D·cos α)`
+
+where `fᵣ = RPM/60`, N = ball count, D = pitch diameter, d = ball diameter, α = contact angle. Harmonics (×2, ×3) confirm a fault rather than a single spurious peak.
 
 ---
 
@@ -221,7 +233,7 @@ Plain OpenAI (`OPENAI_API_KEY` / `OPENAI_MODEL`) also works. Without any key, su
 |---|---|---|
 | Frontend (React/Vite) | **Vercel** | `artifacts/smartbearing` |
 | API server (Express + Socket.io + MongoDB) | **Render** | `artifacts/api-server` (via `render.yaml`) |
-| ML predictor (FastAPI + XGBoost) | **Render** | `artifacts/api-server/src/ml` (via `render.yaml`) |
+| ML predictor (FastAPI + scikit-learn) | **Render** | `artifacts/api-server/src/ml` (via `render.yaml`) |
 
 See **[DEPLOYMENT.md](DEPLOYMENT.md)** for the full setup (MongoDB Atlas + Render blueprint + Vercel).
 
@@ -232,7 +244,7 @@ See **[DEPLOYMENT.md](DEPLOYMENT.md)** for the full setup (MongoDB Atlas + Rende
 ```
 artifacts/
   api-server/            # Node.js API (Express + Socket.io + MongoDB)
-    src/ml/              # Python FastAPI ML server (XGBoost, 37 features)
+    src/ml/              # Python FastAPI ML server (scikit-learn, 29 features, 6 classes)
   smartbearing/          # React + Vite dashboard
   edge-firmware/         # ESP32-S3 reference firmware (Arduino)
 lib/                     # Shared TS packages (db, api-zod, api-client-react)
@@ -245,7 +257,7 @@ scripts/                 # Workspace tooling
 
 | Name | Role | Responsibilities |
 |------|------|------------------|
-| **Prateek** | AI & ML Architecture | XGBoost model training, feature extraction, CAD enclosure design |
+| **Prateek** | AI & ML Architecture | ML model training, feature extraction, CAD enclosure design |
 | **Varun Sreeram** | Backend API | Node.js server, WebSocket streaming, WhatsApp integration |
 | **Vaishnav** | Frontend & UI/UX | React dashboard, 3D visualizations, Recharts data plotting |
 | **Sri Charan** | Operations & DevOps | Repository management, code integrations |

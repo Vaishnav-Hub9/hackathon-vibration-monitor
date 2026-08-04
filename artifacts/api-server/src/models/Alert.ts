@@ -1,5 +1,15 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
+export interface AlertEvidence {
+  label: string;
+  confidence: number;
+  dominantFreq: number;
+  rpm: number;
+  peaks: { freq: number; amplitude: number }[];
+  features: { rms: number; kurtosis: number; crestFactor: number };
+  defectFrequencies: { fr: number; bpfo: number; bpfi: number; bsf: number; ftf: number };
+}
+
 export interface IAlert extends Document {
   machineId: string;
   spindleId: string;
@@ -8,6 +18,7 @@ export interface IAlert extends Document {
   message: string;
   technicianSummary?: string;
   anomalyScore?: number;
+  evidence?: AlertEvidence;
   detectedAt: Date;
   acknowledgedAt?: Date;
   resolvedAt?: Date;
@@ -22,6 +33,25 @@ const AlertSchema: Schema = new Schema({
   message: { type: String, required: true },
   technicianSummary: { type: String },
   anomalyScore: { type: Number },
+  evidence: {
+    label: { type: String },
+    confidence: { type: Number },
+    dominantFreq: { type: Number },
+    rpm: { type: Number },
+    peaks: [{ freq: { type: Number }, amplitude: { type: Number } }],
+    features: {
+      rms: { type: Number },
+      kurtosis: { type: Number },
+      crestFactor: { type: Number }
+    },
+    defectFrequencies: {
+      fr: { type: Number },
+      bpfo: { type: Number },
+      bpfi: { type: Number },
+      bsf: { type: Number },
+      ftf: { type: Number }
+    }
+  },
   detectedAt: { type: Date, required: true, default: Date.now, index: true },
   acknowledgedAt: { type: Date },
   resolvedAt: { type: Date },

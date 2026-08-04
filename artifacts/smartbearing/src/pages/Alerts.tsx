@@ -5,12 +5,22 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Link } from 'wouter';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { Download, CheckCircle2, Bell, Clock } from 'lucide-react';
+import { Download, CheckCircle2, Bell, Clock, ChevronDown, ChevronUp, FileSearch } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { alertsApi, analyticsApi } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
 
 type AlertStatus = 'active' | 'acknowledged' | 'resolved';
+
+type AlertEvidence = {
+  label: string;
+  confidence: number;
+  dominantFreq: number;
+  rpm: number;
+  peaks: { freq: number; amplitude: number }[];
+  features: { rms: number; kurtosis: number; crestFactor: number };
+  defectFrequencies: { fr: number; bpfo: number; bpfi: number; bsf: number; ftf: number };
+};
 
 type Alert = {
   id: string;
@@ -21,6 +31,7 @@ type Alert = {
   message: string;
   technicianSummary?: string;
   anomalyScore: number;
+  evidence?: AlertEvidence | null;
   timestamp: string;
   status: AlertStatus;
   estimatedTimeToFailure: string | null;
@@ -31,6 +42,7 @@ export default function Alerts() {
   const [alertList, setAlertList] = useState<Alert[]>([]);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [timelineData, setTimelineData] = useState<any[]>([]);
+  const [expandedEvidence, setExpandedEvidence] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -215,6 +227,60 @@ export default function Alerts() {
                         <span>Score: {alert.anomalyScore}</span>
                         {alert.estimatedTimeToFailure && <span className="text-amber">ETF: {alert.estimatedTimeToFailure}</span>}
                       </div>
+
+                      {alert.evidence && (
+                        <div className="mt-3">
+                          <button
+                            onClick={() => setExpandedEvidence(expandedEvidence === alert.id ? null : alert.id)}
+                            className="flex items-center gap-1.5 text-xs font-semibold text-amber hover:text-amber/80 transition-colors"
+                          >
+                            <FileSearch className="w-3.5 h-3.5" />
+                            {expandedEvidence === alert.id ? 'Hide' : 'View'} Evidence
+                            {expandedEvidence === alert.id ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                          </button>
+
+                          <AnimatePresence>
+                            {expandedEvidence === alert.id && (
+                              <motion.div
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: 'auto' }}
+                                exit={{ opacity: 0, height: 0 }}
+                                className="overflow-hidden"
+                              >
+                                <div className="mt-3 p-4 bg-[#0A0E1A] border border-navy rounded-lg grid lg:grid-cols-2 gap-4">
+                                  <div>
+                                    <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2">Triggering Spectrum (top peaks)</p>
+                                    <div className="h-28">
+                                      <ResponsiveContainer width="100%" height="100%">
+                                        <BarChart data={alert.evidence.peaks}>
+                                          <XAxis dataKey="freq" stroke="#64748B" fontSize={9} tickFormatter={(v) => `${v}Hz`} />
+                                          <YAxis stroke="#64748B" fontSize={9} />
+                                          <Tooltip cursor={{ fill: '#1E2D4A' }} contentStyle={{ backgroundColor: '#0F1629', borderColor: '#1E2D4A' }} />
+                                          <Bar dataKey="amplitude" fill="#EA580C" radius={[2, 2, 0, 0]} isAnimationActive={false} />
+                                        </BarChart>
+                                      </ResponsiveContainer>
+                                    </div>
+                                  </div>
+                                  <div className="text-xs font-mono-data space-y-2 text-slate-400">
+                                    <p className="text-slate-300 font-bold">
+                                      {alert.evidence.label} · {(alert.evidence.confidence * 100).toFixed(1)}% confidence
+                                    </p>
+                                    <div className="grid grid-cols-2 gap-2">
+                                      <span>RMS: <b className="text-white">{alert.evidence.features.rms} g</b></span>
+                                      <span>Kurtosis: <b className="text-white">{alert.evidence.features.kurtosis}</b></span>
+                                      <span>Crest: <b className="text-white">{alert.evidence.features.crestFactor}</b></span>
+                                      <span>RPM: <b className="text-white">{alert.evidence.rpm}</b></span>
+                                    </div>
+                                    <p className="pt-1 text-[11px]">
+                                      Defect freqs: BPFO <b className="text-[#EA580C]">{alert.evidence.defectFrequencies.bpfo.toFixed(0)}</b> · BPFI <b className="text-[#F59E0B]">{alert.evidence.defectFrequencies.bpfi.toFixed(0)}</b> · BSF <b className="text-[#A855F7]">{alert.evidence.defectFrequencies.bsf.toFixed(0)}</b> Hz
+                                    </p>
+                                  </div>
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
+                      )}
                     </div>
 
                     {!isResolved && (

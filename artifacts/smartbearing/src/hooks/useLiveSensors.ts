@@ -15,6 +15,8 @@ export type LiveSensor = {
   anomalyScore: number;
   acousticLevel: number;
   status: string;
+  mlLabel?: string;
+  mlConfidence?: number;
   vibDelta: number;
   tempDelta: number;
 };
@@ -72,6 +74,8 @@ export function useLiveSensors(machineId?: string) {
             temperature: data.temperature,
             anomalyScore: data.bpfoScore,
             acousticLevel: data.acousticRMS ?? 0,
+            mlLabel: data.mlLabel,
+            mlConfidence: data.mlConfidence,
             status,
             vibDelta: existingIdx >= 0 ? +(data.accel_z - prev[existingIdx].accel_z).toFixed(3) : 0,
             tempDelta: existingIdx >= 0 ? +(data.temperature - prev[existingIdx].temperature).toFixed(1) : 0,

@@ -25,14 +25,14 @@ router.post('/stop', (req: Request, res: Response) => {
 
 router.post('/inject-fault', (req: Request, res: Response) => {
   try {
-    const { machineId } = req.body;
+    const { machineId, faultType } = req.body;
     if (!machineId) {
       res.status(400).json({ success: false, error: 'machineId is required' });
       return;
     }
-    
-    sensorSimulator.injectFault(machineId);
-    res.json({ success: true, data: { status: `Fault injected on ${machineId}` } });
+
+    sensorSimulator.injectFault(machineId, faultType);
+    res.json({ success: true, data: { status: `Fault injected on ${machineId}${faultType ? ` (${faultType})` : ''}` } });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }

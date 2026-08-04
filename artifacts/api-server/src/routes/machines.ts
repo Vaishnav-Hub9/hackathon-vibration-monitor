@@ -19,7 +19,10 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
         ...m,
         id: m.machineId,
         healthScore: latestReading ? latestReading.healthScore : 100,
-        activeSensors: 5
+        activeSensors: 5,
+        mlLabel: latestReading?.mlLabel || null,
+        mlConfidence: latestReading?.mlConfidence ?? null,
+        rpm: latestReading?.rpm ?? null
       };
     }));
     
@@ -44,7 +47,10 @@ router.get('/:id', async (req: Request, res: Response): Promise<void> => {
       ...machine,
       id: machine.machineId,
       healthScore: latestReading ? latestReading.healthScore : 100,
-      activeSensors: 5
+      activeSensors: 5,
+      mlLabel: latestReading?.mlLabel || null,
+      mlConfidence: latestReading?.mlConfidence ?? null,
+      rpm: latestReading?.rpm ?? null
     };
     
     res.json({ success: true, data });

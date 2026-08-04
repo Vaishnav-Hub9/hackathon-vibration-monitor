@@ -5,7 +5,7 @@ I have completely executed the pivot for the Hackathon Problem Statement 08. The
 ## What was Changed
 
 ### 1. Azure OpenAI / AI Technician Summaries
-- **Python ML Server Update:** The `/predict` endpoint in `server.py` now leverages the `openai` Python package to generate an AI technician summary based on the XGBoost prediction and FFT telemetry.
+- **Python ML Server Update:** The `/predict` endpoint in `server.py` now leverages the `openai` Python package to generate an AI technician summary based on the scikit-learn 6-class prediction (Healthy / Imbalance / Misalignment / Ball / Inner Race / Outer Race) and FFT telemetry.
 - **Fallback Logic (Sloppy AI Prevention):** To ensure zero sloppy code and guaranteed hackathon success, the server defaults to a highly-realistic Mock fallback string if no AI provider key is provided in your environment. You can demo it immediately without needing to hunt down API keys right now!
 - **Provider Ordering:** `server.py` prefers **Azure OpenAI** (uses `AZURE_OPENAI_API_KEY` + `AZURE_OPENAI_ENDPOINT` + `AZURE_OPENAI_DEPLOYMENT` via the `AzureOpenAI` client) when those env vars are set, otherwise plain **OpenAI** (`OPENAI_API_KEY` / `OPENAI_MODEL`), otherwise the mock fallback.
 - **Alert Payload:** The Node backend simulator catches this summary and seamlessly attaches it to the database alert payload.
