@@ -3,6 +3,7 @@ import { SpindleReading } from '../models/SpindleReading.js';
 import { Alert } from '../models/Alert.js';
 import { getIo } from '../socket.js';
 import { computeFFTBins } from '../lib/fft.js';
+import { getPreventionTips } from '../lib/prevention.js';
 
 interface MLFeatures {
   mean?: number;
@@ -391,6 +392,7 @@ class SensorSimulator {
                 defectFrequencies: df,
               };
 
+              const preventionTips = getPreventionTips(mlLabel);
               const newAlert = new Alert({
                 machineId: machine.machineId,
                 spindleId,
@@ -400,6 +402,7 @@ class SensorSimulator {
                   ? `${mlLabel} detected with ${(mlConfidence * 100).toFixed(1)}% confidence.`
                   : 'Vibration elevated. Monitor closely.',
                 technicianSummary,
+                prevention: preventionTips,
                 anomalyScore: bpfoScore,
                 evidence,
               });
@@ -415,6 +418,7 @@ class SensorSimulator {
                   type: severity.toUpperCase(),
                   message: newAlertObj.message,
                   technicianSummary: newAlertObj.technicianSummary,
+                  prevention: preventionTips,
                   anomalyScore: bpfoScore,
                   evidence,
                   timestamp: newAlertObj.detectedAt.toISOString().replace('T', ' ').substring(0, 19),

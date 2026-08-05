@@ -12,6 +12,8 @@ type AlertData = {
   rul: string;
   bpfo: string;
   message: string;
+  prevention: string[];
+  critical: boolean;
 };
 
 const ALERTS: AlertData[] = [];
@@ -40,6 +42,9 @@ export default function WhatsAppAlert() {
         if (!isMounted || list.length === 0) return;
         const mapped: AlertData[] = list.slice(0, 2).map((a: any, i: number) => {
           const vib = a.message?.match(/([\d.]+)\s*g/i);
+          const prevention = Array.isArray(a.prevention) && a.prevention.length > 0
+            ? a.prevention
+            : ['Schedule inspection. Monitor vibration closely.'];
           return {
             machine: a.machineName || a.machineId,
             id: a.machineId,
@@ -54,6 +59,8 @@ export default function WhatsAppAlert() {
               `${a.message}\n` +
               `Est. Time to Failure: ${a.estimatedTimeToFailure || '—'}\n\n` +
               `${a.technicianSummary || 'Schedule inspection.'}`,
+            prevention,
+            critical: a.type === 'CRITICAL',
           };
         });
         if (isMounted) setAlerts(mapped);
@@ -76,7 +83,7 @@ export default function WhatsAppAlert() {
   }, [triggered, show, alerts.length]);
 
   const alert = alerts[Math.min(alertIdx, alerts.length - 1)];
-  const isCritical = (alerts[alertIdx]?.message ?? '').includes('*CRITICAL*');
+  const isCritical = alerts[alertIdx]?.critical ?? false;
 
   if (!alert) return null;
 
@@ -104,10 +111,11 @@ export default function WhatsAppAlert() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 60, scale: 0.92 }}
             transition={{ type: 'spring', stiffness: 320, damping: 28 }}
-            className="fixed bottom-20 right-6 z-50 w-[340px] rounded-2xl overflow-hidden shadow-2xl border"
+            className="fixed bottom-20 right-6 z-50 w-[340px] max-w-[calc(100vw-3rem)] rounded-2xl overflow-hidden shadow-2xl border flex flex-col"
             style={{
               background: '#0E1621',
               borderColor: isCritical ? 'rgba(234,88,12,0.4)' : 'rgba(245,158,11,0.35)',
+              maxHeight: 'min(calc(100dvh - 5.5rem), 640px)',
             }}
           >
             {/* WhatsApp-style header */}
@@ -131,7 +139,7 @@ export default function WhatsAppAlert() {
             </div>
 
             {/* Message bubble */}
-            <div className="p-3">
+            <div className="p-3 flex-1 overflow-y-auto min-h-0">
               <div
                 className="rounded-xl rounded-tl-none px-4 py-3 text-xs leading-relaxed relative"
                 style={{ background: '#1E2B33', color: '#E9EDF0' }}
@@ -166,14 +174,39 @@ export default function WhatsAppAlert() {
                 {/* Expandable full message */}
                 <AnimatePresence>
                   {expanded && (
-                    <motion.pre
+                    <motion.div
                       initial={{ height: 0, opacity: 0 }}
                       animate={{ height: 'auto', opacity: 1 }}
                       exit={{ height: 0, opacity: 0 }}
-                      className="font-sans whitespace-pre-wrap text-[11px] text-[#C9D1D9] leading-relaxed mb-2 overflow-hidden"
+                      className="overflow-hidden"
                     >
-                      {alert.message}
-                    </motion.pre>
+                      <div className="font-sans whitespace-pre-wrap text-[11px] text-[#C9D1D9] leading-relaxed mb-2">
+                        {alert.message}
+                      </div>
+
+                      {/* Prevention techniques — actionable steps per fault class */}
+                      {alert.prevention.length > 0 && (
+                        <div
+                          className="rounded-lg p-2.5 mb-2 border"
+                          style={{
+                            background: 'rgba(37,211,102,0.06)',
+                            borderColor: 'rgba(37,211,102,0.25)',
+                          }}
+                        >
+                          <div className="flex items-center gap-1.5 text-[10px] font-bold text-[#25D366] uppercase tracking-wide mb-1.5">
+                            <span>🛠️</span> Prevention techniques
+                          </div>
+                          <ul className="space-y-1">
+                            {alert.prevention.map((p, idx) => (
+                              <li key={idx} className="flex items-start gap-1.5 text-[11px] text-[#C9D1D9] leading-snug">
+                                <span className="text-[#25D366] font-bold mt-px">✓</span>
+                                <span>{p}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </motion.div>
                   )}
                 </AnimatePresence>
 

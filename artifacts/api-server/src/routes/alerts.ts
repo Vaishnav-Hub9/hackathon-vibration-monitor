@@ -29,6 +29,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
       type: a.severity.toUpperCase(),
       message: a.message,
       technicianSummary: a.technicianSummary,
+      prevention: a.prevention ?? [],
       anomalyScore: a.anomalyScore ?? 0,
       evidence: a.evidence ?? null,
       timestamp: a.detectedAt.toISOString().replace('T', ' ').substring(0, 19),

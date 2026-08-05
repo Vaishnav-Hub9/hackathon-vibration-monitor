@@ -3,6 +3,7 @@ import { SpindleReading } from '../models/SpindleReading.js';
 import { Alert } from '../models/Alert.js';
 import { getIo } from '../socket.js';
 import { computeFFTBins } from '../lib/fft.js';
+import { getPreventionTips } from '../lib/prevention.js';
 import { defectFrequencies, type AlertEvidence, type DefectFrequencies } from './SensorSimulator.js';
 
 export interface EdgeReadingInput {
@@ -195,6 +196,7 @@ export async function processEdgeReading(
         await existingAlert.save();
       }
 
+      const preventionTips = getPreventionTips(mlLabel);
       const newAlert = new Alert({
         machineId: machine.machineId,
         spindleId,
@@ -204,6 +206,7 @@ export async function processEdgeReading(
           ? `${mlLabel} detected with ${(mlConfidence * 100).toFixed(1)}% confidence.`
           : 'Vibration elevated. Monitor closely.',
         technicianSummary,
+        prevention: preventionTips,
         anomalyScore: bpfoScore,
         evidence: buildEvidence(mlLabel, mlConfidence, vibrationFFT, effectiveRpm, rms, kurtosisOf(input.signal), peakAbs),
       });
@@ -219,6 +222,7 @@ export async function processEdgeReading(
           type: severity.toUpperCase(),
           message: obj.message,
           technicianSummary: obj.technicianSummary,
+          prevention: preventionTips,
           anomalyScore: bpfoScore,
           evidence: obj.evidence ?? null,
           timestamp: obj.detectedAt.toISOString().replace('T', ' ').substring(0, 19),

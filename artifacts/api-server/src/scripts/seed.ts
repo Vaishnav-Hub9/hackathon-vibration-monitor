@@ -7,6 +7,7 @@ import { SpindleReading } from '../models/SpindleReading.js';
 import { Alert } from '../models/Alert.js';
 import { MaintenanceLog } from '../models/MaintenanceLog.js';
 import { computeFFTBins } from '../lib/fft.js';
+import { getPreventionTips } from '../lib/prevention.js';
 import { defectFrequencies } from '../simulator/SensorSimulator.js';
 
 dotenv.config();
@@ -102,6 +103,7 @@ async function seed(): Promise<void> {
         machineId: 'M003', spindleId: 'SN001', severity: 'critical', type: 'CRITICAL',
         message: 'Outer Race detected with 90.0% confidence.', status: 'active',
         technicianSummary: 'High spectral energy at BPFO (~847 Hz) with 90.0% probability of Outer Race wear. Recommended Action: Schedule bearing replacement within 18 hours.',
+        prevention: getPreventionTips('Outer Race'),
         anomalyScore: 0.8,
         evidence: {
           label: 'Outer Race', confidence: 0.9, dominantFreq: 847.0, rpm: 14200,
@@ -114,6 +116,7 @@ async function seed(): Promise<void> {
         machineId: 'M002', spindleId: 'SN002', severity: 'warning', type: 'WARNING',
         message: 'Imbalance detected with 85.0% confidence.', status: 'active',
         technicianSummary: 'Dominant spectral peak at 1x RPM indicates rotor imbalance. Recommended Action: Schedule rotor balancing.',
+        prevention: getPreventionTips('Imbalance'),
         anomalyScore: 0.4,
         evidence: {
           label: 'Imbalance', confidence: 0.85, dominantFreq: 236.7, rpm: 14200,
@@ -126,6 +129,7 @@ async function seed(): Promise<void> {
         machineId: 'M006', spindleId: 'SN003', severity: 'warning', type: 'WARNING',
         message: 'Misalignment detected with 82.0% confidence.', status: 'active',
         technicianSummary: 'Strong spectral peak at 2x RPM (473 Hz) indicates shaft misalignment. Recommended Action: Realign coupling and verify shaft straightness.',
+        prevention: getPreventionTips('Misalignment'),
         anomalyScore: 0.42,
         evidence: {
           label: 'Misalignment', confidence: 0.82, dominantFreq: 473.3, rpm: 14200,

@@ -47,9 +47,6 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <div className="bg-yellow-500 text-black text-center text-xs py-1.5 font-bold tracking-wide z-50 relative">
-            ⚠️ SAFETY DISCLAIMER: Fault predictions are probabilistic. All risk alerts require human engineer confirmation. This system monitors only and does not issue direct machinery shutdown commands.
-          </div>
           <Router />
           <CommandPalette />
         </WouterRouter>
