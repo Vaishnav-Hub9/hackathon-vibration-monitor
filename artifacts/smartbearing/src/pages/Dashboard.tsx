@@ -4,7 +4,7 @@ import { Link } from 'wouter';
 import DashLayout from '@/components/layout/DashLayout';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { useCountUp } from '@/hooks/useCountUp';
-import { useLiveSensors } from '@/hooks/useLiveSensors';
+import { useRealSensors } from '@/hooks/useRealSensors';
 import { machinesApi, analyticsApi, alertsApi } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
 import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
@@ -27,9 +27,15 @@ export default function Dashboard() {
   
   const fleetHealth = useCountUp(summary.avgHealthScore, 1500);
   const dtSaved = useCountUp(summary.downtimePrevented ?? 0, 1500);
-  const liveSensors = useLiveSensors();
+  const { sensors: liveSensors, isLive } = useRealSensors();
   
   const [chartData, setChartData] = useState<any[]>([]);
+  
+  // The Fault Injector targets machines[0] (M001). Its verdict comes from the
+  // Live Sensor Feed, which caps at 6 nodes — M003/M002 traffic can evict M001
+  // between cycles, making the verdict strip flicker. Pin the last-seen sensor
+  // for the injector machine so the highlight stays stable.
+  const [injectorSensor, setInjectorSensor] = useState<any | undefined>(undefined);
 
   useEffect(() => {
     let isMounted = true;
@@ -102,7 +108,11 @@ export default function Dashboard() {
 
   // Fault Injector targets the first machine; pass its live ML verdict from the socket feed
   const injectorMachine = machines[0];
-  const injectorSensor = liveSensors.find(s => s.machineId === injectorMachine?.id);
+  const liveInjectorSensor = liveSensors.find(s => s.machineId === injectorMachine?.id);
+  // Keep the latest verdict even when the cap-6 feed evicts the machine
+  useEffect(() => {
+    if (liveInjectorSensor) setInjectorSensor(liveInjectorSensor);
+  }, [liveInjectorSensor]);
 
   return (
     <DashLayout>
@@ -161,9 +171,9 @@ export default function Dashboard() {
         <div className="bg-navy-card border border-navy rounded-xl overflow-hidden">
           <div className="flex items-center justify-between px-5 py-3 border-b border-navy">
             <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-[#10B981] animate-pulse"></span>
+              <span className={`w-2 h-2 rounded-full ${isLive ? 'bg-[#10B981] animate-pulse' : 'bg-slate-600'}`}></span>
               <h3 className="text-sm font-semibold text-white">Live Sensor Feed</h3>
-              <span className="text-[10px] text-slate-500 font-mono-data">Live via Socket.io</span>
+              <span className="text-[10px] text-slate-500 font-mono-data">{isLive ? 'Live via Socket.io' : 'Reconnecting…'}</span>
             </div>
             <Link href="/predictions" className="text-xs text-amber hover:underline">View all →</Link>
           </div>

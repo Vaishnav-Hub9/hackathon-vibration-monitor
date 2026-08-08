@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>SmartBearing Capture</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { 
+      font-family: system-ui; background: #0A0E1A; color: #e2e8f0;
+      min-height: 100vh; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; padding: 20px;
+    }
+    .logo { font-size: 24px; font-weight: 700; color: white; margin-bottom: 8px; }
+    .logo span { color: #F59E0B; }
+    .subtitle { font-size: 13px; color: #64748b; margin-bottom: 32px; text-align: center; }
+    
+    /* Machine selector */
+    .select-wrap { width: 100%; max-width: 360px; margin-bottom: 16px; }
+    select, input { 
+      width: 100%; padding: 12px 16px; border-radius: 10px;
+      background: #141E35; border: 1px solid #1E2D4A; color: white;
+      font-size: 15px; outline: none; appearance: none;
+    }
+    label { font-size: 12px; color: #64748b; text-transform: uppercase;
+            letter-spacing: .05em; margin-bottom: 6px; display: block; }
+
+    /* Big record button */
+    #recordBtn {
+      width: 120px; height: 120px; border-radius: 50%;
+      background: #1E2D4A; border: 3px solid #F59E0B;
+      color: #F59E0B; font-size: 14px; font-weight: 600;
+      cursor: pointer; margin: 24px auto; display: flex;
+      flex-direction: column; align-items: center; justify-content: center;
+      gap: 6px; transition: all .2s;
+    }
+    #recordBtn.recording { 
+      background: #EA580C; border-color: #EA580C; color: white;
+      box-shadow: 0 0 40px rgba(234,88,12,0.5);
+      animation: pulse 1s infinite;
+    }
+    @keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+    .rec-dot { width: 14px; height: 14px; border-radius: 50%; 
+               background: currentColor; }
+    
+    /* FFT canvas */
+    #fftCanvas { 
+      width: 100%; max-width: 360px; height: 120px; 
+      border-radius: 8px; background: #0F1629;
+      border: 1px solid #1E2D4A; margin-bottom: 16px;
+    }
+    
+    /* Readings */
+    .readings { 
+      display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+      width: 100%; max-width: 360px; margin-bottom: 20px;
+    }
+    .reading-card {
+      background: #141E35; border: 1px solid #1E2D4A;
+      border-radius: 10px; padding: 12px;
+    }
+    .reading-label { font-size: 10px; color: #64748b; 
+                     text-transform: uppercase; letter-spacing: .05em; }
+    .reading-value { font-size: 22px; font-weight: 700; 
+                     font-family: monospace; margin-top: 4px; }
+    .reading-unit { font-size: 11px; color: #64748b; }
+    
+    /* Status */
+    #statusBar {
+      width: 100%; max-width: 360px; padding: 12px 16px;
+      border-radius: 8px; font-size: 13px; text-align: center;
+      background: #141E35; border: 1px solid #1E2D4A;
+      margin-bottom: 12px; min-height: 42px;
+    }
+    
+    /* Action buttons */
+    .actions { display: flex; gap: 10px; width: 100%; max-width: 360px; }
+    #sendBtn, #baselineBtn {
+      flex: 1; padding: 14px;
+      border-radius: 10px; background: #F59E0B; color: #0A0E1A;
+      font-size: 16px; font-weight: 700; border: none; cursor: pointer;
+      display: none;
+    }
+    #baselineBtn { background: #141E35; color: #F59E0B; border: 1px solid #1E2D4A; font-size: 13px; }
+    #sendBtn:disabled, #baselineBtn:disabled { opacity: .5; cursor: not-allowed; }
+    
+    /* Health badge */
+    .health-badge {
+      display: inline-block; padding: 4px 12px; border-radius: 20px;
+      font-size: 12px; font-weight: 600; margin-top: 8px;
+    }
+    .h-critical { background: rgba(234,88,12,.2); color: #EA580C; 
+                  border: 1px solid rgba(234,88,12,.4); }
+    .h-warning { background: rgba(245,158,11,.2); color: #F59E0B;
+                 border: 1px solid rgba(245,158,11,.4); }
+    .h-healthy { background: rgba(16,185,129,.2); color: #10B981;
+                 border: 1px solid rgba(16,185,129,.4); }
+  </style>
+</head>
+<body>
+
+  <div class="logo">Smart<span>Bearing</span></div>
+  <p class="subtitle">Place phone against bearing housing · tap record</p>
+
+  <!-- Machine selector -->
+  <div class="select-wrap">
+    <label>Select Machine</label>
+    <select id="machineSelect">
+      <option value="M001">Ring Frame #1</option>
+      <option value="M002">Ring Frame #2</option>
+      <option value="M003" selected>Ring Frame #3</option>
+      <option value="M004">Ring Frame #4</option>
+      <option value="M006">Ring Frame #5</option>
+    </select>
+  </div>
+
+  <div class="select-wrap">
+    <label>Node / Location</label>
+    <select id="nodeSelect">
+      <option value="SN001">Main Drive Bearing</option>
+      <option value="SN002">Section 2 Drive</option>
+      <option value="SN004" selected>Section 4 Drive</option>
+    </select>
+  </div>
+
+  <!-- FFT display -->
+  <canvas id="fftCanvas"></canvas>
+
+  <!-- Record button -->
+  <button id="recordBtn" onclick="toggleRecord()">
+    <div class="rec-dot"></div>
+    <span id="recLabel">RECORD</span>
+    <span id="recTimer" style="font-size:11px;color:#64748b"></span>
+  </button>
+
+  <!-- Live readings -->
+  <div class="readings">
+    <div class="reading-card">
+      <div class="reading-label">Vibration RMS</div>
+      <div class="reading-value" id="vibVal" style="color:#F59E0B">—</div>
+      <div class="reading-unit">g</div>
+    </div>
+    <div class="reading-card">
+      <div class="reading-label">Acoustic Score</div>
+      <div class="reading-value" id="acVal" style="color:#3B82F6">—</div>
+      <div class="reading-unit">normalised</div>
+    </div>
+    <div class="reading-card">
+      <div class="reading-label">BPFO Peak</div>
+      <div class="reading-value" id="bpfoVal" style="color:#EA580C">—</div>
+      <div class="reading-unit">Hz</div>
+    </div>
+    <div class="reading-card">
+      <div class="reading-label">Anomaly Score</div>
+      <div class="reading-value" id="anomalyVal" style="color:#10B981">—</div>
+      <div class="reading-unit">/ 1.0</div>
+    </div>
+  </div>
+
+  <!-- Status -->
+  <div id="statusBar">Tap RECORD and hold the phone against the bearing housing</div>
+
+  <!-- Send to dashboard + baseline calibration -->
+  <div class="actions">
+    <button id="baselineBtn" onclick="saveBaseline()">Save as Baseline</button>
+    <button id="sendBtn" onclick="sendToDashboard()">Send to Dashboard →</button>
+  </div>
+
+<script>
+// ═══════════════════════════════════════════════
+// CONFIGURATION
+// ═══════════════════════════════════════════════
+// For a real phone demo, set this to your laptop's LAN IP, e.g.
+//   const API_BASE = 'http://192.168.1.10:5000';
+// (see README.md — mic access needs HTTPS or localhost on the phone)
+const API_BASE = 'http://localhost:5000';
+const SAMPLE_RATE = 44100;
+const FFT_SIZE = 4096;
+const CAPTURE_DURATION_MS = 4000;  // 4-second capture burst
+
+// Bearing geometry — 6205 deep-groove ball bearing
+// Outer diameter: ~52mm, bore: 25mm, 8 balls, ball dia: 7.94mm
+const BEARING = {
+  N: 8,           // number of balls
+  d: 7.94,        // ball diameter mm
+  D: 38.5,        // pitch circle diameter mm
+  alpha: 15,      // contact angle degrees
+};
+
+// Spindle speeds per machine (RPM) — from factory profile
+const SPINDLE_RPM = {
+  M001: 12000, M002: 14000, M003: 15000, M004: 12000, M006: 13000
+};
+
+// ═══════════════════════════════════════════════
+// BPFO CALCULATOR
+// ═══════════════════════════════════════════════
+function calcBPFO(rpm) {
+  const Hz = rpm / 60;
+  const cosAlpha = Math.cos(BEARING.alpha * Math.PI / 180);
+  return (BEARING.N / 2) * Hz * (1 - (BEARING.d / BEARING.D) * cosAlpha);
+}
+
+// ═══════════════════════════════════════════════
+// AUDIO + ACCELEROMETER STATE
+// ═══════════════════════════════════════════════
+let audioCtx = null;
+let analyser = null;
+let micStream = null;
+let accelSamples = [];
+let accelHandler = null;
+let recordTimer = null;
+let isRecording = false;
+let captureResult = null;
+let animFrame = null;
+let lastTimeWindow = null;   // latest raw mic waveform (fftSize samples) → ML inference
+let micSampleRate = SAMPLE_RATE;
+
+// Calibration baseline (noise floor) for the selected machine.
+// Captured ONCE per machine with the machine OFF. When present, raw
+// BPFO/acoustic values are normalised against it before anomaly scoring.
+let currentBaseline = null;
+let lastRaw = { bpfo: 0, acoustic: 0, vib: 0 };
+
+// Canvas setup
+const canvas = document.getElementById('fftCanvas');
+const ctx2d = canvas.getContext('2d');
+canvas.width = canvas.offsetWidth * window.devicePixelRatio;
+canvas.height = canvas.offsetHeight * window.devicePixelRatio;
+ctx2d.scale(window.devicePixelRatio, window.devicePixelRatio);
+const CW = canvas.offsetWidth;
+const CH = canvas.offsetHeight;
+
+// ═══════════════════════════════════════════════
+// ACCELEROMETER CAPTURE
+// ═══════════════════════════════════════════════
+function startAccelerometer() {
+  accelSamples = [];
+  
+  // DeviceMotion API — works on HTTPS or localhost
+  // Permission required on iOS 13+
+  if (typeof DeviceMotionEvent !== 'undefined' && 
+      typeof DeviceMotionEvent.requestPermission === 'function') {
+    DeviceMotionEvent.requestPermission()
+      .then(perm => { if (perm === 'granted') listenAccel(); })
+      .catch(console.error);
+  } else {
+    listenAccel();
+  }
+}
+
+function listenAccel() {
+  accelHandler = (e) => {
+    const a = e.accelerationIncludingGravity;
+    if (!a) return;
+    // Store raw magnitude; gravity is removed in computeVibrationRMS
+    const mag = Math.sqrt(
+      (a.x||0)*(a.x||0) + 
+      (a.y||0)*(a.y||0) + 
+      (a.z||0)*(a.z||0)
+    );
+    accelSamples.push(mag);
+  };
+  window.addEventListener('devicemotion', accelHandler);
+}
+
+function stopAccelerometer() {
+  if (accelHandler) {
+    window.removeEventListener('devicemotion', accelHandler);
+    accelHandler = null;
+  }
+}
+
+function computeVibrationRMS() {
+  if (accelSamples.length === 0) return 0;
+  // Remove gravity (approx 9.81 m/s² = 1g)
+  const GRAVITY = 9.81;
+  const filtered = accelSamples.map(v => Math.abs(v - GRAVITY));
+  const sumSq = filtered.reduce((s, v) => s + v * v, 0);
+  const rmsMs2 = Math.sqrt(sumSq / filtered.length);
+  // Convert m/s² → g (1g = 9.81 m/s²)
+  return rmsMs2 / GRAVITY;
+}
+
+// ═══════════════════════════════════════════════
+// AUDIO CAPTURE + FFT
+// ═══════════════════════════════════════════════
+async function startMicrophone() {
+  try {
+    micStream = await navigator.mediaDevices.getUserMedia({ 
+      audio: { 
+        echoCancellation: false,   // CRITICAL — disable for machinery audio
+        noiseSuppression: false,   // CRITICAL — we WANT the noise 
+        autoGainControl: false,    // CRITICAL — fixed gain for accurate amplitude
+        sampleRate: SAMPLE_RATE,
+        channelCount: 1
+      } 
+    });
+    
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)({
+      sampleRate: SAMPLE_RATE
+    });
+    micSampleRate = audioCtx.sampleRate || SAMPLE_RATE;
+    
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = FFT_SIZE;
+    analyser.smoothingTimeConstant = 0.1;  // low smoothing = faster response
+    analyser.minDecibels = -90;
+    analyser.maxDecibels = -10;
+    
+    const source = audioCtx.createMediaStreamSource(micStream);
+    source.connect(analyser);
+    // Do NOT connect to audioCtx.destination — don't play back
+    
+    return true;
+  } catch(e) {
+    setStatus('⚠️ Microphone access denied. Please allow and retry.', 'error');
+    return false;
+  }
+}
+
+function stopMicrophone() {
+  if (micStream) {
+    micStream.getTracks().forEach(t => t.stop());
+    micStream = null;
+  }
+  if (audioCtx) {
+    audioCtx.close();
+    audioCtx = null;
+    analyser = null;
+  }
+}
+
+// ═══════════════════════════════════════════════
+// REAL-TIME FFT DRAW + FEATURE EXTRACTION
+// ═══════════════════════════════════════════════
+let bpfoSnapshots = [];   // collect BPFO amplitude over capture window
+let acousticSnapshots = [];
+
+function drawFFT() {
+  if (!analyser) return;
+  
+  // Capture the current raw mic waveform — /predict scores a 2048-point
+  // TIME-DOMAIN window (it computes its own FFT + features), so we grab the
+  // analyser's raw samples here and send them with the reading.
+  const timeData = new Float32Array(analyser.fftSize);
+  analyser.getFloatTimeDomainData(timeData);
+  lastTimeWindow = Array.from(timeData);
+  
+  // Use the ACTUAL context sample rate for bin→Hz mapping (browsers may
+  // resample the mic stream, shifting the bin positions)
+  const sampleRate = audioCtx ? audioCtx.sampleRate : SAMPLE_RATE;
+  
+  const bins = analyser.frequencyBinCount; // = FFT_SIZE / 2 = 2048
+  const freqData = new Float32Array(bins);
+  analyser.getFloatFrequencyData(freqData);
+  // freqData[i] = amplitude in dB at freq i × (sampleRate / FFT_SIZE)
+  
+  const machineId = document.getElementById('machineSelect').value;
+  const rpm = SPINDLE_RPM[machineId] || 13000;
+  const bpfoHz = calcBPFO(rpm);
+  const bpfoBin = Math.round(bpfoHz * FFT_SIZE / sampleRate);
+  const bpfiBin = Math.round((bpfoHz * 1.6) * FFT_SIZE / sampleRate);
+  
+  // Normalise dB range -90..-10 → 0..1
+  function norm(db) { return Math.max(0, Math.min(1, (db - (-90)) / 80)); }
+  
+  // Track BPFO bin amplitude (window of ±3 bins around BPFO)
+  const bpfoWindow = [];
+  for (let b = bpfoBin - 3; b <= bpfoBin + 3; b++) {
+    if (b >= 0 && b < bins) bpfoWindow.push(norm(freqData[b]));
+  }
+  const bpfoAmp = bpfoWindow.length ? Math.max(...bpfoWindow) : 0;
+  bpfoSnapshots.push(bpfoAmp);
+  
+  // Overall acoustic level — RMS of all bins in voice/machinery range
+  // ~200 Hz–8000 Hz
+  const voiceBins = freqData.slice(18, 741);
+  const acLevel = Math.sqrt(
+    voiceBins.reduce((s, v) => s + norm(v)**2, 0) / voiceBins.length
+  );
+  acousticSnapshots.push(acLevel);
+  
+  // Update live readouts
+  document.getElementById('bpfoVal').textContent = bpfoHz.toFixed(1);
+  document.getElementById('acVal').textContent = acLevel.toFixed(3);
+  
+  // ── DRAW ──
+  ctx2d.clearRect(0, 0, CW, CH);
+  ctx2d.fillStyle = '#0F1629';
+  ctx2d.fillRect(0, 0, CW, CH);
+  
+  // Only show first 400 bins (0–4300 Hz at 44.1kHz) — relevant range
+  const showBins = Math.min(400, bins);
+  const barW = CW / showBins;
+  
+  for (let i = 0; i < showBins; i++) {
+    const amp = norm(freqData[i]);
+    const h = amp * CH;
+    
+    // Color: BPFO zone = orange/red, BPFI zone = yellow, else blue
+    const isBPFO = Math.abs(i - bpfoBin) <= 3;
+    const isBPFI = Math.abs(i - bpfiBin) <= 3;
+    
+    if (isBPFO) {
+      ctx2d.fillStyle = amp > 0.3 ? '#EA580C' : '#F59E0B';
+    } else if (isBPFI) {
+      ctx2d.fillStyle = amp > 0.25 ? '#F59E0B' : '#EAB308';
+    } else {
+      ctx2d.fillStyle = `rgba(59,130,246,${0.4 + amp * 0.6})`;
+    }
+    
+    ctx2d.fillRect(i * barW, CH - h, barW - 0.5, h);
+  }
+  
+  // BPFO marker line
+  const markerX = bpfoBin * barW;
+  ctx2d.strokeStyle = 'rgba(234,88,12,0.6)';
+  ctx2d.setLineDash([3, 3]);
+  ctx2d.beginPath();
+  ctx2d.moveTo(markerX, 0);
+  ctx2d.lineTo(markerX, CH);
+  ctx2d.stroke();
+  ctx2d.setLineDash([]);
+  
+  // Label
+  ctx2d.fillStyle = '#EA580C';
+  ctx2d.font = '9px monospace';
+  ctx2d.fillText(`BPFO ${bpfoHz.toFixed(0)}Hz`, Math.min(markerX + 3, CW - 60), 12);
+  
+  animFrame = requestAnimationFrame(drawFFT);
+}
+
+// ═══════════════════════════════════════════════
+// RECORD TOGGLE
+// ═══════════════════════════════════════════════
+async function toggleRecord() {
+  if (isRecording) {
+    stopCapture();
+  } else {
+    await startCapture();
+  }
+}
+
+async function startCapture() {
+  setStatus('Requesting microphone access...', 'info');
+  const ok = await startMicrophone();
+  if (!ok) return;
+  
+  startAccelerometer();
+  bpfoSnapshots = [];
+  acousticSnapshots = [];
+  isRecording = true;
+  captureResult = null;
+  
+  document.getElementById('recordBtn').classList.add('recording');
+  document.getElementById('recLabel').textContent = 'STOP';
+  document.getElementById('sendBtn').style.display = 'none';
+  document.getElementById('baselineBtn').style.display = 'none';
+  
+  setStatus('🔴 Recording... Hold phone firmly against bearing housing', 'recording');
+  
+  // Start FFT animation
+  drawFFT();
+  
+  // Countdown
+  let remaining = CAPTURE_DURATION_MS / 1000;
+  document.getElementById('recTimer').textContent = `${remaining}s`;
+  const countdown = setInterval(() => {
+    remaining--;
+    document.getElementById('recTimer').textContent = remaining > 0 ? `${remaining}s` : '';
+    if (remaining <= 0) clearInterval(countdown);
+  }, 1000);
+  
+  // Auto-stop after CAPTURE_DURATION_MS
+  recordTimer = setTimeout(() => stopCapture(), CAPTURE_DURATION_MS);
+}
+
+function stopCapture() {
+  if (recordTimer) { clearTimeout(recordTimer); recordTimer = null; }
+  if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null; }
+  
+  isRecording = false;
+  document.getElementById('recordBtn').classList.remove('recording');
+  document.getElementById('recLabel').textContent = 'RECORD';
+  document.getElementById('recTimer').textContent = '';
+  
+  // Compute final readings from snapshots
+  const vibRMS = computeVibrationRMS();
+  stopAccelerometer();
+  stopMicrophone();
+  
+  // Raw BPFO score (mean amplitude in BPFO window over capture)
+  const rawBpfo = bpfoSnapshots.length ? 
+    bpfoSnapshots.reduce((s,v) => s+v, 0) / bpfoSnapshots.length : 0;
+  
+  // Raw acoustic level
+  const rawAcoustic = acousticSnapshots.length ?
+    acousticSnapshots.reduce((s,v) => s+v, 0) / acousticSnapshots.length : 0;
+  
+  lastRaw = { bpfo: rawBpfo, acoustic: rawAcoustic, vib: vibRMS };
+  
+  const machineId = document.getElementById('machineSelect').value;
+  const nodeId = document.getElementById('nodeSelect').value;
+  captureResult = computeResult(machineId, nodeId, vibRMS);
+  
+  renderResult();
+}
+
+// ═══════════════════════════════════════════════
+// SCORING — normalised against calibration baseline
+// ═══════════════════════════════════════════════
+// RMS-normalise the mic waveform to ~1g so the ML model sees amplitudes in the
+// vibration range it was trained on (mic audio is much quieter than a MEMS g
+// scale). The spectral shape — the fault signature — is preserved by scaling.
+function normalizeSignal(signal) {
+  const rms = Math.sqrt(signal.reduce((s, v) => s + v * v, 0) / signal.length);
+  if (!rms || rms < 1e-6) return signal; // silent window — let the ML server handle it
+  return signal.map(v => v / rms);
+}
+
+function computeResult(machineId, nodeId, vibRMS) {
+  // Normalise raw BPFO/acoustic against the machine's noise-floor baseline
+  const bpfoScore = Math.max(0, lastRaw.bpfo - (currentBaseline ? currentBaseline.bpfoFloor : 0));
+  const acousticLevel = Math.max(0, lastRaw.acoustic - (currentBaseline ? currentBaseline.acousticFloor : 0));
+  
+  // Compute anomaly score — weighted combination
+  // BPFO presence is the primary signal
+  // Vibration RMS is secondary
+  const bpfoAnomaly = Math.min(1, bpfoScore * 3.5);    // amplify — small BPFO rise = significant
+  const vibAnomaly  = Math.min(1, Math.max(0, (vibRMS - 0.5) / 4.0));
+  const acousticAnomaly = Math.min(1, acousticLevel * 2.0);
+  
+  // Weighted: BPFO dominates (it's the most specific signal)
+  const anomalyScore = Math.min(1, 
+    bpfoAnomaly * 0.55 + vibAnomaly * 0.25 + acousticAnomaly * 0.20
+  );
+  
+  // Health score — same formula as existing SmartBearing dashboard
+  const healthScore = Math.max(5, Math.min(100,
+    Math.round(100 - anomalyScore * 100 - (vibRMS > 1.5 ? (vibRMS - 1.5) * 10 : 0))
+  ));
+  
+  // Status
+  const status = (vibRMS > 3.0 || anomalyScore > 0.60) ? 'critical' :
+                 (vibRMS > 1.5 || anomalyScore > 0.30) ? 'warning' : 'healthy';
+  
+  // ETF
+  const etf = anomalyScore > 0.60 ? '6–18 hours' :
+              anomalyScore > 0.30 ? '3–7 days' : '> 30 days';
+  
+  // Augment with dataset values for channels we don't have
+  return {
+    nodeId,
+    machineId,
+    // LIVE from sensors:
+    vibrationRMS: parseFloat(vibRMS.toFixed(3)),
+    acousticLevel: parseFloat(acousticLevel.toFixed(3)),
+    bpfoScore: parseFloat(bpfoScore.toFixed(3)),
+    anomalyScore: parseFloat(anomalyScore.toFixed(3)),
+    healthScore,
+    status,
+    estimatedTimeToFailure: etf,
+    // DATASET-AUGMENTED (realistic values by health stage):
+    temperature: augmentTemperature(healthScore),
+    voltage: augmentVoltage(),
+    fftSnapshot: bpfoSnapshots.slice(0, 40),  // 40 points for FFT chart
+    // Raw mic waveform → real ML verdict (backend relays to /predict)
+    signal: lastTimeWindow ? normalizeSignal(lastTimeWindow.slice(0, 2048)) : undefined,
+    rpm: SPINDLE_RPM[machineId] || 13000,
+    sampleRate: micSampleRate || SAMPLE_RATE,
+    timestamp: new Date().toISOString(),
+    capturedBy: 'smartphone',
+    captureMethod: 'audio+accelerometer'
+  };
+}
+
+function renderResult() {
+  if (!captureResult) return;
+  
+  // Update UI
+  document.getElementById('vibVal').textContent = captureResult.vibrationRMS.toFixed(3);
+  document.getElementById('acVal').textContent = captureResult.acousticLevel.toFixed(3);
+  document.getElementById('anomalyVal').textContent = captureResult.anomalyScore.toFixed(3);
+  
+  const badge = captureResult.status === 'critical' ? 'h-critical' : 
+                captureResult.status === 'warning'  ? 'h-warning'  : 'h-healthy';
+  setStatus(
+    `Capture complete · Health: ${captureResult.healthScore}% · ETF: ${captureResult.estimatedTimeToFailure}
+     <br><span class="health-badge ${badge}">${captureResult.status.toUpperCase()}</span>`,
+    captureResult.status
+  );
+  
+  document.getElementById('sendBtn').style.display = 'block';
+  document.getElementById('baselineBtn').style.display = 'block';
+}
+
+// ═══════════════════════════════════════════════
+// DATASET AUGMENTATION
+// Temperature is a lagging indicator highly correlated 
+// with health score. We model this from bearing physics:
+// Healthy (~95%): 35–45°C; Warning (~60%): 50–65°C; Critical (~40%): 65–80°C
+// ═══════════════════════════════════════════════
+function augmentTemperature(healthScore) {
+  // Inverse linear mapping from health → temperature range
+  // With gaussian noise to simulate measurement variance
+  const basetemp = 35 + (100 - healthScore) * 0.45;
+  const noise = (Math.random() - 0.5) * 4;
+  return Math.round(Math.max(30, Math.min(100, basetemp + noise)));
+}
+
+function augmentVoltage() {
+  // Indian grid: 220V ±5-10% variance
+  const base = 220;
+  const variance = (Math.random() - 0.5) * 22;  // ±11V
+  return Math.round(base + variance);
+}
+
+// ═══════════════════════════════════════════════
+// CALIBRATION BASELINE
+// ═══════════════════════════════════════════════
+async function fetchBaseline(machineId) {
+  try {
+    const res = await fetch(`${API_BASE}/api/sensor-readings/calibrate/${machineId}`);
+    if (res.ok) {
+      const json = await res.json();
+      currentBaseline = json.data || null;
+      setStatus(currentBaseline
+        ? `✅ Calibration baseline loaded for ${machineId} — readings will be normalised`
+        : `No baseline yet for ${machineId}. For best accuracy: record with the machine OFF and tap "Save as Baseline".`,
+        'info');
+    } else {
+      currentBaseline = null;
+      setStatus(`No baseline recorded for ${machineId}. For best accuracy, calibrate with the machine OFF.`, 'info');
+    }
+  } catch (e) {
+    // Backend unreachable — keep the last baseline (if any) and stay quiet;
+    // the record flow reports connection errors when sending.
+    if (!currentBaseline) {
+      setStatus('Backend unreachable — start the API server (port 5000) to calibrate & send.', 'error');
+    }
+  }
+}
+
+async function saveBaseline() {
+  if (!captureResult) return;
+  const machineId = document.getElementById('machineSelect').value;
+  const btn = document.getElementById('baselineBtn');
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
+  try {
+    const res = await fetch(`${API_BASE}/api/sensor-readings/calibrate/${machineId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        bpfoBaseline: lastRaw.bpfo,
+        acousticBaseline: lastRaw.acoustic
+      })
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    
+    currentBaseline = { bpfoFloor: lastRaw.bpfo, acousticFloor: lastRaw.acoustic };
+    
+    // Re-score this capture against the new baseline and refresh the UI
+    const nodeId = document.getElementById('nodeSelect').value;
+    captureResult = computeResult(machineId, nodeId, lastRaw.vib);
+    renderResult();
+    
+    setStatus('✅ Baseline saved for this machine — future readings will be normalised.', 'healthy');
+    btn.textContent = 'Baseline Saved ✓';
+  } catch (e) {
+    setStatus(`⚠️ Could not save baseline: ${e.message}. Check that the server is running.`, 'error');
+    btn.textContent = 'Save as Baseline';
+    btn.disabled = false;
+  }
+}
+
+// Refetch baseline when the machine selection changes
+document.getElementById('machineSelect').addEventListener('change', (e) => {
+  fetchBaseline(e.target.value);
+});
+fetchBaseline(document.getElementById('machineSelect').value);
+
+// ═══════════════════════════════════════════════
+// SEND TO DASHBOARD BACKEND
+// ═══════════════════════════════════════════════
+async function sendToDashboard() {
+  if (!captureResult) return;
+  
+  const btn = document.getElementById('sendBtn');
+  btn.disabled = true;
+  btn.textContent = 'Sending...';
+  setStatus('Sending reading to SmartBearing dashboard...', 'info');
+  
+  try {
+    const response = await fetch(`${API_BASE}/api/sensor-readings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(captureResult)
+    });
+    
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    
+    // The backend relays the raw waveform to the ML server — surface the real
+    // model verdict (label + confidence) back on the phone.
+    let mlText = '';
+    try {
+      const json = await response.json();
+      if (json.mlLabel && typeof json.mlConfidence === 'number') {
+        mlText = ` · ML verdict: ${json.mlLabel.toUpperCase()} (${Math.round(json.mlConfidence * 100)}%)`;
+      }
+    } catch (e) { /* non-JSON response — verdict not available */ }
+    
+    setStatus(`✅ Reading sent to dashboard successfully!${mlText}`, 'healthy');
+    btn.textContent = 'Send to Dashboard →';
+    btn.disabled = false;
+    
+    // Also trigger WhatsApp alert if critical
+    if (captureResult.status === 'critical') {
+      await sendWhatsAppAlert(captureResult);
+    }
+    
+  } catch(e) {
+    setStatus(`⚠️ Could not reach backend: ${e.message}. 
+               Check that your server is running.`, 'error');
+    btn.textContent = 'Retry →';
+    btn.disabled = false;
+  }
+}
+
+async function sendWhatsAppAlert(reading) {
+  await fetch(`${API_BASE}/api/sensor-readings/whatsapp-alert`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      machineId: reading.machineId,
+      vibrationRMS: reading.vibrationRMS,
+      anomalyScore: reading.anomalyScore,
+      estimatedTimeToFailure: reading.estimatedTimeToFailure,
+      bpfoScore: reading.bpfoScore
+    })
+  });
+}
+
+// ═══════════════════════════════════════════════
+// STATUS HELPER
+// ═══════════════════════════════════════════════
+function setStatus(msg, type) {
+  const el = document.getElementById('statusBar');
+  el.innerHTML = msg;
+  el.style.borderColor = 
+    type === 'critical' ? 'rgba(234,88,12,.5)' :
+    type === 'warning'  ? 'rgba(245,158,11,.5)' :
+    type === 'healthy'  ? 'rgba(16,185,129,.5)'  :
+    type === 'recording'? 'rgba(234,88,12,.5)'   :
+    '#1E2D4A';
+  el.style.color =
+    type === 'critical' ? '#EA580C' :
+    type === 'warning'  ? '#F59E0B' :
+    type === 'healthy'  ? '#10B981' : '#94A3B8';
+}
+
+// Redraw canvas on resize (reset transform first so DPR scaling doesn't compound)
+window.addEventListener('resize', () => {
+  canvas.width = canvas.offsetWidth * window.devicePixelRatio;
+  canvas.height = canvas.offsetHeight * window.devicePixelRatio;
+  ctx2d.setTransform(1, 0, 0, 1, 0, 0);
+  ctx2d.scale(window.devicePixelRatio, window.devicePixelRatio);
+});
+</script>
+</body>
+</html>

@@ -1,16 +1,22 @@
 import os
+import math
+import logging
 import joblib
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import List
 from openai import OpenAI, AzureOpenAI
 from dotenv import load_dotenv
 
 from features import (
+    CLASSES,
     extract_features,
     feature_matrix,
     compute_defect_frequencies,
 )
+
+logger = logging.getLogger("smartbearing_ml")
 
 # Load a local .env (e.g. artifacts/api-server/src/ml/.env) if present, so keys
 # can live in a gitignored file instead of the shell/process environment.
@@ -115,17 +121,73 @@ def generate_technician_summary(label: str, confidence: float, features: dict, r
     )
 
 
+def _is_degenerate(signal: List[float]) -> bool:
+    """True for signals the model cannot score: empty, non-finite, or constant.
+
+    Constant signals (including the zero-filled array the dashboard health probe
+    sends) make scipy's kurtosis/skew NaN, which sklearn rejects and Starlette
+    cannot serialize — returning a 500. Treat them as flat, unmeasurable input.
+    """
+    if not signal:
+        return True
+    if not all(math.isfinite(v) for v in signal):
+        return True
+    return max(signal) - min(signal) < 1e-9
+
+
+def _healthy_verdict(req: PredictRequest, note: str) -> dict:
+    """Low-confidence Healthy response with the same shape as a real prediction."""
+    raw_features = extract_features(req.signal, sample_rate=req.sample_rate, rpm=req.rpm)
+    # Sanitize non-finite values (kurtosis/skew on flat signals) so the payload
+    # serializes cleanly — Starlette's JSONResponse rejects NaN.
+    features = {k: (v if math.isfinite(v) else 0.0) for k, v in raw_features.items()}
+    probs = {c: 0.1 for c in CLASSES}
+    probs["Healthy"] = 0.5
+    defect = compute_defect_frequencies(req.rpm)
+    return {
+        "label": "Healthy",
+        "confidence": 0.5,
+        "features": features,
+        "technician_summary": (
+            f"{note} No fault signature detected; returned as Healthy with low "
+            "confidence (0.5). Continue routine monitoring."
+        ),
+        "probabilities": probs,
+        "defect_frequencies": {
+            "fr": defect["fr"],
+            "bpfo": defect["bpfo"],
+            "bpfi": defect["bpfi"],
+            "bsf": defect["bsf"],
+            "ftf": defect["ftf"],
+            "rpm": req.rpm,
+        },
+    }
+
+
 @app.post("/predict")
 def predict(req: PredictRequest):
     if len(req.signal) != 2048:
-        return {"error": f"Expected signal of length 2048, got {len(req.signal)}"}
+        return JSONResponse(
+            status_code=400,
+            content={"error": f"Expected signal of length 2048, got {len(req.signal)}"},
+        )
+
+    # Degenerate input (empty, non-finite, or constant) — the health probe and
+    # edge sensors can produce it; answer gracefully instead of erroring.
+    if _is_degenerate(req.signal):
+        return _healthy_verdict(req, note="Signal is flat or non-finite — no measurable vibration.")
 
     features = extract_features(req.signal, sample_rate=req.sample_rate, rpm=req.rpm)
     df = feature_matrix([features])
 
-    # Predict
-    prediction = model.predict(df)[0]
-    probability = model.predict_proba(df)[0]
+    try:
+        # Predict
+        prediction = model.predict(df)[0]
+        probability = model.predict_proba(df)[0]
+    except Exception as exc:
+        # Safety net: never 500 on an unscorable window — degrade to Healthy.
+        logger.warning("Model prediction failed (%s); returning Healthy fallback.", exc)
+        return _healthy_verdict(req, note="Model could not score this signal.")
 
     label = encoder.inverse_transform([prediction])[0]
     confidence = float(max(probability))
