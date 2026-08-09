@@ -1,4 +1,4 @@
-import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
+import { Switch, Route, Router as WouterRouter, Redirect, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -13,8 +13,10 @@ import Predictions from "@/pages/Predictions";
 import Alerts from "@/pages/Alerts";
 import Analytics from "@/pages/Analytics";
 import Settings from "@/pages/Settings";
+import DigitalTwin from "@/pages/DigitalTwin";
+import Workflow from "@/pages/Workflow";
 import NotFound from "@/pages/not-found";
-import type { ComponentType } from "react";
+import { useEffect, type ComponentType } from "react";
 
 const queryClient = new QueryClient();
 
@@ -24,11 +26,21 @@ function ProtectedRoute({ component: Component }: { component: ComponentType }) 
   return <Component />;
 }
 
+function ScrollToTopOnNavigate() {
+  const [location] = useLocation();
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "auto" });
+  }, [location]);
+  return null;
+}
+
 function Router() {
   return (
     <Switch>
       <Route path="/" component={Landing} />
       <Route path="/bearing/exploded" component={BearingExploded} />
+      <Route path="/twin" component={DigitalTwin} />
+      <Route path="/workflow" component={Workflow} />
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />
       <Route path="/dashboard" component={Dashboard} />
@@ -47,6 +59,7 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+          <ScrollToTopOnNavigate />
           <Router />
           <CommandPalette />
         </WouterRouter>

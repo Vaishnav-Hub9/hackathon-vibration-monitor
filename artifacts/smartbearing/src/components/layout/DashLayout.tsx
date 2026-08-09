@@ -6,6 +6,8 @@ import {
   AlertTriangle, 
   BarChart3, 
   Settings as SettingsIcon,
+  Boxes,
+  Workflow,
   Menu,
   LogOut,
   LogIn,
@@ -95,6 +97,8 @@ export default function DashLayout({ children }: DashLayoutProps) {
     { href: '/predictions', icon: BarChart3, label: 'Predictions' },
     { href: '/alerts', icon: AlertTriangle, label: 'Alerts', badge: 3 },
     { href: '/analytics', icon: BarChart3, label: 'Analytics' },
+    { href: '/twin', icon: Boxes, label: 'Digital Twin' },
+    { href: '/workflow', icon: Workflow, label: 'Pipeline' },
     { href: '/settings', icon: SettingsIcon, label: 'Settings' },
   ];
 
@@ -103,8 +107,11 @@ export default function DashLayout({ children }: DashLayoutProps) {
       {/* Sidebar */}
       <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-navy-card border-r border-navy transform ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 transition-transform duration-200 ease-in-out`}>
         <div className="flex items-center justify-between h-16 px-6 border-b border-navy">
-          <Link href="/dashboard" className="flex items-center gap-2 cursor-pointer text-white hover:text-amber transition-colors">
-            <Activity className="w-6 h-6 text-amber" />
+          <Link href="/dashboard" className="flex items-center gap-2 cursor-pointer text-white hover:text-amber transition-colors group">
+            <span className="relative flex items-center justify-center w-9 h-9 rounded-lg bg-gradient-to-br from-amber/20 to-[#EA580C]/10 border border-amber/30 shadow-[0_0_14px_rgba(245,158,11,0.25)] group-hover:shadow-[0_0_22px_rgba(245,158,11,0.4)] transition-shadow">
+              <Activity className="w-5 h-5 text-amber" />
+              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-[#10B981] border border-navy" />
+            </span>
             <span className="font-display font-bold text-lg tracking-wide">
               Smart<span className="text-amber">Bearing</span>
             </span>
@@ -119,10 +126,13 @@ export default function DashLayout({ children }: DashLayoutProps) {
             const isActive = location === item.href || (location.startsWith('/machine') && item.href.startsWith('/machine'));
             const Icon = item.icon;
             return (
-              <Link key={item.href} href={item.href}>
-                <div className={`flex items-center justify-between px-3 py-2.5 rounded-lg cursor-pointer transition-colors ${isActive ? 'bg-[#141E35] text-amber' : 'text-slate-300 hover:bg-[#141E35] hover:text-white'}`}>
+              <Link key={item.href} href={item.href} className="block">
+                <div className={`relative flex items-center justify-between px-3 py-2.5 rounded-lg cursor-pointer transition-all duration-150 ${isActive ? 'bg-[#141E35] text-amber shadow-[inset_0_0_0_1px_rgba(245,158,11,0.15)]' : 'text-slate-300 hover:bg-[#141E35] hover:text-white'}`}>
+                  {isActive && (
+                    <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-r-full bg-gradient-to-b from-amber to-[#EA580C] shadow-[0_0_10px_rgba(245,158,11,0.7)]" />
+                  )}
                   <div className="flex items-center gap-3">
-                    <Icon className="w-5 h-5" />
+                    <Icon className={`w-5 h-5 ${isActive ? 'text-amber' : ''}`} />
                     <span className="font-medium text-sm">{item.label}</span>
                   </div>
                   {item.badge && (
@@ -148,9 +158,20 @@ export default function DashLayout({ children }: DashLayoutProps) {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 md:ml-64 flex flex-col min-h-screen">
+      <main className="flex-1 md:ml-64 flex flex-col min-h-screen relative">
+        {/* Ambient background — aurora + grid + noise for every dashboard page */}
+        <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden>
+          <div className="absolute inset-0 grid-bg opacity-[0.12]" />
+          <div className="aurora aurora-animate w-[560px] h-[560px] bg-amber/[0.07] -top-56 -left-40" />
+          <div className="aurora aurora-animate w-[480px] h-[480px] bg-[#3B82F6]/[0.06] top-1/3 -right-48" style={{ animationDelay: '-5s' }} />
+          <div className="aurora aurora-animate w-[420px] h-[420px] bg-[#EA580C]/[0.04] bottom-0 left-1/4" style={{ animationDelay: '-10s' }} />
+          <div className="absolute inset-0 overflow-hidden">
+            <div className="w-full h-full noise opacity-40" />
+          </div>
+        </div>
         {/* Top Header */}
-        <header className="h-16 bg-navy-card/80 backdrop-blur-md border-b border-navy flex items-center justify-between px-4 sm:px-6 sticky top-0 z-40">
+        <header className="relative h-16 bg-navy-card/80 backdrop-blur-md border-b border-navy flex items-center justify-between px-4 sm:px-6 sticky top-0 z-40">
+          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber/50 to-transparent" />
           <div className="flex items-center gap-4">
             <button className="md:hidden text-slate-300 hover:text-white" onClick={() => setIsMobileMenuOpen(true)}>
               <Menu className="w-6 h-6" />
@@ -170,7 +191,7 @@ export default function DashLayout({ children }: DashLayoutProps) {
         </header>
 
         {/* Page Content */}
-        <div className="flex-1 p-4 sm:p-6 lg:p-8">
+        <div className="relative flex-1 p-4 sm:p-6 lg:p-8">
           {mlOnline === false && (
             <div className="mb-6 flex items-center gap-3 bg-[#2B0D0A] border border-[#EA580C]/40 text-[#EA580C] px-4 py-3 rounded-xl text-sm font-medium">
               <Cpu className="w-5 h-5 flex-shrink-0 animate-pulse" />

@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useScroll, useSpring } from 'framer-motion';
 import { Link } from 'wouter';
 import {
   Activity, ActivitySquare, ArrowRight, CheckCircle2, ShieldAlert, Cpu, Zap, MessageCircle,
@@ -44,6 +44,18 @@ const WA_ALERTS = [
   { type: 'CRITICAL', machine: 'Ring Frame #3', id: 'M003', time: 'Just now', vib: '3.84 g', ttf: '~6 hrs', msg: 'BPFO spike detected. Bearing failure imminent — replace by next shift.' },
   { type: 'WARNING', machine: 'Ring Frame #2', id: 'M002', time: '2 min ago', vib: '2.11 g', ttf: '~22 hrs', msg: 'Vibration RMS elevated 2.3x. Schedule maintenance within next shift.' },
   { type: 'WARNING', machine: 'Ring Frame #5', id: 'M006', time: '9 min ago', vib: '1.52 g', ttf: '5–10 days', msg: 'Temperature anomaly: bearing housing at 61°C.' },
+];
+
+/* Live data ticker strip */
+const TICKER_ITEMS = [
+  { icon: Waves, text: 'Live BPFO detection' },
+  { icon: Gauge, text: '14,400 RPM ring frames' },
+  { icon: Cpu, text: '6 fault classes · real ML model' },
+  { icon: Wifi, text: 'Offline-first edge intelligence' },
+  { icon: MessageCircle, text: 'WhatsApp alerts in plain language' },
+  { icon: Zap, text: '<2ms fault detection' },
+  { icon: Thermometer, text: 'Dual-modal sensing · vib + acoustic' },
+  { icon: ShieldAlert, text: '400 spindles protected per machine' },
 ];
 
 function WhatsAppSimulator() {
@@ -132,6 +144,9 @@ export default function Landing() {
   const [scrolled, setScrolled] = useState(false);
   const [activeSection, setActiveSection] = useState('');
 
+  const { scrollYProgress } = useScroll();
+  const progressScale = useSpring(scrollYProgress, { stiffness: 130, damping: 28, restDelta: 0.001 });
+
   useEffect(() => {
     const onScroll = () => {
       setScrolled(window.scrollY > 10);
@@ -185,11 +200,21 @@ export default function Landing() {
         </div>
       </nav>
 
+      {/* Scroll progress bar */}
+      <motion.div
+        className="fixed top-0 left-0 right-0 h-[3px] origin-left z-[60] bg-gradient-to-r from-amber via-[#EA580C] to-amber shadow-[0_0_12px_rgba(245,158,11,0.5)]"
+        style={{ scaleX: progressScale }}
+      />
+
       {/* ============================ HERO ============================ */}
-      <section className="relative min-h-[100dvh] pt-20 flex items-center overflow-hidden">
+      <section className="noise relative min-h-[100dvh] pt-20 flex items-center overflow-hidden">
         <div className="absolute inset-0 grid-bg opacity-30" />
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-navy/40 to-navy" />
         <div className="absolute -top-32 left-1/2 -translate-x-1/2 w-[700px] h-[700px] bg-amber/10 rounded-full blur-[140px] pointer-events-none" />
+        {/* Premium aurora ambience */}
+        <div className="aurora aurora-animate w-[420px] h-[420px] bg-[#F59E0B]/10 top-[12%] -left-24" />
+        <div className="aurora aurora-animate w-[520px] h-[520px] bg-[#3B82F6]/10 bottom-[8%] -right-32" style={{ animationDelay: '-5s' }} />
+        <div className="aurora aurora-animate w-[300px] h-[300px] bg-[#8B5CF6]/10 top-[45%] right-[28%]" style={{ animationDelay: '-9s' }} />
 
         <div className="relative z-10 max-w-7xl mx-auto px-6 grid lg:grid-cols-2 gap-14 items-center w-full py-16">
           {/* Left copy */}
@@ -200,7 +225,7 @@ export default function Landing() {
             </div>
             <h1 className="font-display text-5xl sm:text-6xl md:text-7xl font-bold leading-[1.08] text-white">
               Hear the bearing <br />
-              <span className="text-amber-glow">before it breaks.</span>
+              <span className="text-gradient-amber drop-shadow-[0_0_24px_rgba(245,158,11,0.35)]">before it breaks.</span>
             </h1>
             <p className="text-lg sm:text-xl text-slate-400 max-w-xl leading-relaxed">
               Dual-modal edge intelligence for spindle bearing failure prediction in power loom MSMEs. Plug in, walk away, get alerted on WhatsApp — before 400 spindles go dark.
@@ -208,13 +233,21 @@ export default function Landing() {
 
             <div className="flex flex-wrap items-center gap-4 pt-2">
               <Link href="/register">
-                <Button className="bg-amber hover:bg-amber/90 text-navy font-semibold h-12 px-8 text-base shadow-[0_0_24px_rgba(245,158,11,0.35)] border-none">
+                <Button className="shimmer glow-pulse bg-amber hover:bg-amber/90 text-navy font-semibold h-12 px-8 text-base border-none">
                   Get Started <ArrowRight className="w-4 h-4 ml-2" />
                 </Button>
               </Link>
               <Button variant="outline" onClick={() => scrollToId('how')} className="border-navy text-slate-300 hover:text-white hover:bg-navy-card h-12 px-8 text-base">
                 See How It Works
               </Button>
+              <div className="flex flex-wrap items-center gap-3 pt-1 w-full">
+                <Link href="/twin" className="flex items-center gap-1.5 text-[11px] font-mono-data px-3.5 py-2 rounded-lg border border-[#00F0FF]/40 bg-[#00F0FF]/5 text-[#00F0FF] hover:bg-[#00F0FF]/15 hover:shadow-[0_0_20px_rgba(0,240,255,0.25)] transition-all">
+                  <Cpu className="w-3.5 h-3.5" /> Live Digital Twin
+                </Link>
+                <Link href="/workflow" className="flex items-center gap-1.5 text-[11px] font-mono-data px-3.5 py-2 rounded-lg border border-amber/40 bg-amber/5 text-amber hover:bg-amber/15 hover:shadow-[0_0_20px_rgba(245,158,11,0.25)] transition-all">
+                  <Activity className="w-3.5 h-3.5" /> Pipeline Simulation
+                </Link>
+              </div>
             </div>
 
             {/* Live telemetry chips */}
@@ -233,6 +266,7 @@ export default function Landing() {
                 </div>
               ))}
               <div className="flex items-center gap-2 bg-[#0D2B1F]/60 border border-[#10B981]/30 px-3.5 py-2 rounded-lg">
+                <span className="relative w-2 h-2 rounded-full bg-[#10B981] text-[#10B981] ping-ring" />
                 <Wifi className="w-4 h-4 text-[#10B981]" />
                 <div>
                   <div className="text-[9px] uppercase tracking-widest text-slate-500">Node Status</div>
@@ -269,7 +303,7 @@ export default function Landing() {
               <BearingModel />
 
               {/* FFT overlay — floating glass chip, anchored to the empty top-right corner so it never covers the exploded parts */}
-              <div className="absolute top-20 right-3 z-30 hidden sm:block w-[210px] bg-[#0A0E1A]/75 backdrop-blur-md border border-navy/70 rounded-xl p-3 shadow-[0_8px_40px_rgba(0,0,0,0.5)] pointer-events-none">
+              <div className="glass float-slow absolute top-20 right-3 z-30 hidden sm:block w-[210px] rounded-xl p-3 shadow-[0_8px_40px_rgba(0,0,0,0.5)] pointer-events-none">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Live FFT Spectrum</span>
                   <span className="flex items-center gap-1.5 text-[10px] font-mono-data text-[#10B981]"><BellRing className="w-3 h-3" /> BPFO @ 200Hz</span>
@@ -290,6 +324,19 @@ export default function Landing() {
           </motion.div>
         </div>
       </section>
+
+      {/* ============================ LIVE TICKER ============================ */}
+      <div aria-hidden="true" className="relative border-y border-navy bg-[#0F1629]/70 backdrop-blur-md overflow-hidden py-3 select-none">
+        <div className="flex w-max animate-[marquee_32s_linear_infinite] whitespace-nowrap">
+          {[...TICKER_ITEMS, ...TICKER_ITEMS].map((item, i) => (
+            <div key={i} className="flex items-center gap-2.5 px-7 text-[11px] font-mono-data text-slate-400">
+              <item.icon className="w-3.5 h-3.5 text-amber" />
+              <span className="uppercase tracking-widest">{item.text}</span>
+              <span className="text-amber/40 ml-5">✦</span>
+            </div>
+          ))}
+        </div>
+      </div>
 
       {/* ============================ PROBLEM ============================ */}
       <section id="problem" className="py-24 bg-[#0A0E1A] scroll-mt-16">

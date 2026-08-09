@@ -8,10 +8,13 @@ import { useRealSensors } from '@/hooks/useRealSensors';
 import { machinesApi, analyticsApi, alertsApi } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
 import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
-import { Activity, Clock, Cpu, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { Activity, Clock, Cpu, ShieldAlert, BellRing, Wifi, TrendingUp, TrendingDown, Minus, Volume2, Square } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import WhatsAppAlert from '@/components/dashboard/WhatsAppAlert';
 import FaultInjector from '@/components/dashboard/FaultInjector';
+import FleetCopilot from '@/components/dashboard/FleetCopilot';
+import LiveBearingWidget from '@/components/dashboard/LiveBearingWidget';
+import { useFaultAudio, toneForStatus, AUDITION_RPM } from '@/lib/faultSound';
 
 export default function Dashboard() {
   const [, setLocation] = useLocation();
@@ -28,6 +31,7 @@ export default function Dashboard() {
   const fleetHealth = useCountUp(summary.avgHealthScore, 1500);
   const dtSaved = useCountUp(summary.downtimePrevented ?? 0, 1500);
   const { sensors: liveSensors, isLive } = useRealSensors();
+  const { playingKey, play, stop } = useFaultAudio();
   
   const [chartData, setChartData] = useState<any[]>([]);
   
@@ -121,18 +125,28 @@ export default function Dashboard() {
 
         {/* Row 1: KPIs */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <motion.div initial={{opacity:0, y:20}} animate={{opacity:1, y:0}} className="bg-navy-card border border-navy p-5 rounded-xl flex flex-col justify-between">
-            <span className="text-slate-400 text-sm font-medium">Fleet Risk Assessment</span>
+          <motion.div initial={{opacity:0, y:20}} animate={{opacity:1, y:0}} className="card-accent bg-navy-card border border-navy p-5 rounded-xl flex flex-col justify-between">
+            <div className="flex items-center justify-between">
+              <span className="text-slate-400 text-sm font-medium">Fleet Risk Assessment</span>
+              <span className="w-9 h-9 rounded-lg bg-[#F59E0B]/10 border border-amber/25 flex items-center justify-center">
+                <ShieldAlert className="w-4.5 h-4.5 text-amber" />
+              </span>
+            </div>
             <div className="flex items-end gap-3 mt-4">
               <span className="font-mono-data text-4xl font-bold text-amber">{fleetHealth}%</span>
             </div>
             <div className="w-full bg-[#0A0E1A] h-2 rounded-full mt-4 overflow-hidden">
-              <div className="bg-amber h-full rounded-full transition-all duration-700" style={{ width: `${fleetHealth}%` }}></div>
+              <div className="bg-gradient-to-r from-amber to-[#EA580C] h-full rounded-full transition-all duration-700" style={{ width: `${fleetHealth}%` }}></div>
             </div>
           </motion.div>
 
-          <motion.div initial={{opacity:0, y:20}} animate={{opacity:1, y:0}} transition={{delay:0.1}} className="bg-navy-card border border-navy p-5 rounded-xl flex flex-col justify-between">
-            <span className="text-slate-400 text-sm font-medium">Active Alerts</span>
+          <motion.div initial={{opacity:0, y:20}} animate={{opacity:1, y:0}} transition={{delay:0.1}} className="card-accent bg-navy-card border border-navy p-5 rounded-xl flex flex-col justify-between">
+            <div className="flex items-center justify-between">
+              <span className="text-slate-400 text-sm font-medium">Active Alerts</span>
+              <span className="w-9 h-9 rounded-lg bg-[#EA580C]/10 border border-[#EA580C]/25 flex items-center justify-center">
+                <BellRing className="w-4.5 h-4.5 text-[#EA580C]" />
+              </span>
+            </div>
             <div className="mt-4 flex gap-2">
               <span className="bg-[#2B0D0A] text-[#EA580C] border border-[#EA580C]/30 px-3 py-1 rounded-md text-lg font-bold font-mono-data">
                 {alerts.filter(a => a.type === 'CRITICAL').length} Crit
@@ -144,8 +158,13 @@ export default function Dashboard() {
             <span className="text-xs text-slate-500 mt-4">Last 24 hours</span>
           </motion.div>
 
-          <motion.div initial={{opacity:0, y:20}} animate={{opacity:1, y:0}} transition={{delay:0.2}} className="bg-navy-card border border-navy p-5 rounded-xl flex flex-col justify-between">
-            <span className="text-slate-400 text-sm font-medium">Downtime Prevented</span>
+          <motion.div initial={{opacity:0, y:20}} animate={{opacity:1, y:0}} transition={{delay:0.2}} className="card-accent bg-navy-card border border-navy p-5 rounded-xl flex flex-col justify-between">
+            <div className="flex items-center justify-between">
+              <span className="text-slate-400 text-sm font-medium">Downtime Prevented</span>
+              <span className="w-9 h-9 rounded-lg bg-[#10B981]/10 border border-[#10B981]/25 flex items-center justify-center">
+                <Clock className="w-4.5 h-4.5 text-[#10B981]" />
+              </span>
+            </div>
             <div className="mt-4">
               <span className="font-mono-data text-4xl font-bold text-[#10B981]">{dtSaved}</span>
               <span className="text-slate-400 ml-2">hrs</span>
@@ -155,8 +174,13 @@ export default function Dashboard() {
             </span>
           </motion.div>
 
-          <motion.div initial={{opacity:0, y:20}} animate={{opacity:1, y:0}} transition={{delay:0.3}} className="bg-navy-card border border-navy p-5 rounded-xl flex flex-col justify-between">
-            <span className="text-slate-400 text-sm font-medium">Sensor Network</span>
+          <motion.div initial={{opacity:0, y:20}} animate={{opacity:1, y:0}} transition={{delay:0.3}} className="card-accent bg-navy-card border border-navy p-5 rounded-xl flex flex-col justify-between">
+            <div className="flex items-center justify-between">
+              <span className="text-slate-400 text-sm font-medium">Sensor Network</span>
+              <span className="w-9 h-9 rounded-lg bg-[#3B82F6]/10 border border-[#3B82F6]/25 flex items-center justify-center">
+                <Wifi className="w-4.5 h-4.5 text-[#3B82F6]" />
+              </span>
+            </div>
             <div className="mt-4">
               <span className="font-mono-data text-4xl font-bold text-white">{summary.totalMachines * 5}</span>
               <span className="text-slate-400 ml-2">nodes active</span>
@@ -213,13 +237,23 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Fault Injector — live ML demo panel */}
+        {/* Fault Injector + digital twin — live ML demo panel */}
         {injectorMachine && (
-          <FaultInjector
-            machineId={injectorMachine.id}
-            mlLabel={injectorSensor?.mlLabel}
-            mlConfidence={injectorSensor?.mlConfidence}
-          />
+          <div className="grid grid-cols-1 xl:grid-cols-[1fr_340px] gap-4 items-stretch">
+            <FaultInjector
+              machineId={injectorMachine.id}
+              mlLabel={injectorSensor?.mlLabel}
+              mlConfidence={injectorSensor?.mlConfidence}
+            />
+            <LiveBearingWidget
+              name={injectorMachine.name}
+              rpm={injectorSensor?.rpm || 14400}
+              accelZ={injectorSensor?.accel_z ?? 0}
+              status={injectorSensor?.status || injectorMachine.status}
+              mlLabel={injectorSensor?.mlLabel}
+              mlConfidence={injectorSensor?.mlConfidence}
+            />
+          </div>
         )}
 
         {/* Row 2: Machines Grid */}
@@ -237,7 +271,18 @@ export default function Dashboard() {
                   <h3 className="text-white font-bold text-lg">{m.name}</h3>
                   <p className="text-xs text-slate-400 font-mono-data mt-1">{m.id} | {m.totalSpindles || 400} Spindles</p>
                 </div>
-                <StatusBadge status={m.status} />
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); const k = `${m.id}:${toneForStatus(m.status)}`; playingKey === k ? stop() : play(k, AUDITION_RPM); }}
+                    className={`flex items-center gap-1.5 text-[10px] font-semibold px-2 py-1.5 rounded-lg border transition-all ${playingKey === `${m.id}:${toneForStatus(m.status)}` ? 'border-amber/60 bg-amber/15 text-amber shadow-[0_0_12px_rgba(245,158,11,0.3)]' : 'border-navy bg-[#0A0E1A] text-slate-400 hover:text-white hover:border-slate-500'}`}
+                    title="Hear this machine's fault signature"
+                    aria-label="Play fault audio"
+                  >
+                    {playingKey === `${m.id}:${toneForStatus(m.status)}` ? <Square className="w-3 h-3" /> : <Volume2 className="w-3 h-3" />}
+                    Hear
+                  </button>
+                  <StatusBadge status={m.status} />
+                </div>
               </div>
 
               <div className="flex items-end justify-between mt-6">
@@ -314,6 +359,14 @@ export default function Dashboard() {
       </div>
 
       <WhatsAppAlert />
+      <FleetCopilot
+        ctx={{
+          machines,
+          alerts,
+          summary,
+          sensors: liveSensors,
+        }}
+      />
     </DashLayout>
   );
 }

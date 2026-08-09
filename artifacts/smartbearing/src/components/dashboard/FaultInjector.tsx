@@ -6,10 +6,13 @@ import {
   FlaskConical,
   Loader2,
   Shield,
+  Square,
+  Volume2,
   Zap,
   type LucideIcon,
 } from 'lucide-react';
 import { simulatorApi } from '@/lib/api';
+import { useFaultAudio, AUDITION_RPM } from '@/lib/faultSound';
 
 interface FaultOption {
   key: string;
@@ -90,6 +93,7 @@ export default function FaultInjector({
   const [injecting, setInjecting] = useState<string | null>(null);
   const [lastInjected, setLastInjected] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { playingKey, play, stop } = useFaultAudio();
 
   const inject = async (opt: FaultOption) => {
     setInjecting(opt.key);
@@ -160,6 +164,37 @@ export default function FaultInjector({
           );
         })}
       </div>
+
+      {/* Hear the fault — synthesized defect-frequency signatures */}
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <span className="text-[10px] uppercase tracking-widest text-slate-500 mr-1 flex items-center gap-1.5">
+          <Volume2 className="w-3 h-3 text-amber" /> Hear the fault:
+        </span>
+        {FAULT_OPTIONS.map((opt) => {
+          const isPlaying = playingKey === opt.key;
+          return (
+            <button
+              key={opt.key}
+              onClick={() => (isPlaying ? stop() : play(opt.key, AUDITION_RPM))}
+              className={`flex items-center gap-1.5 text-[10px] font-semibold px-2.5 py-1.5 rounded-lg border transition-all ${
+                isPlaying
+                  ? 'border-amber/60 bg-amber/15 text-amber shadow-[0_0_14px_rgba(245,158,11,0.25)]'
+                  : 'border-navy bg-[#0A0E1A] text-slate-400 hover:text-white hover:border-slate-500'
+              }`}
+              title={`Play synthesized ${opt.label} signature`}
+              aria-pressed={isPlaying}
+              aria-label={`${isPlaying ? 'Stop' : 'Play'} synthesized ${opt.label} fault sound`}
+            >
+              {isPlaying ? <Square className="w-3 h-3" /> : <Volume2 className="w-3 h-3" />}
+              {opt.label}
+            </button>
+          );
+        })}
+      </div>
+      <p className="mt-2 text-[10px] text-slate-600 leading-relaxed">
+        Synthesized live from bearing physics — BPFO / BPFI / BSF at {AUDITION_RPM.toLocaleString()} RPM,
+        the same signature the ML model detects.
+      </p>
 
       {/* Live model verdict strip */}
       <div
