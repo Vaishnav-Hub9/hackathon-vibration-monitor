@@ -20,7 +20,8 @@ api.interceptors.request.use((config) => {
 export const authApi = {
   login: (data: any) => api.post('/auth/login', data),
   register: (data: any) => api.post('/auth/register', data),
-  me: () => api.get('/auth/me')
+  me: () => api.get('/auth/me'),
+  updateMe: (data: any) => api.patch('/auth/me', data)
 };
 
 export const machinesApi = {
@@ -37,7 +38,8 @@ export const alertsApi = {
   getAll: (params?: any) => api.get('/alerts', { params }),
   getById: (id: string) => api.get(`/alerts/${id}`),
   acknowledge: (id: string) => api.patch(`/alerts/${id}/acknowledge`),
-  resolve: (id: string) => api.patch(`/alerts/${id}/resolve`)
+  resolve: (id: string) => api.patch(`/alerts/${id}/resolve`),
+  sendTestEmail: () => api.post('/alerts/test-email')
 };
 
 export const analyticsApi = {

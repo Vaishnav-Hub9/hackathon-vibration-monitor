@@ -4,6 +4,7 @@ import { Alert } from '../models/Alert.js';
 import { getIo } from '../socket.js';
 import { computeFFTBins } from '../lib/fft.js';
 import { getPreventionTips } from '../lib/prevention.js';
+import { notifyMailAlert } from '../lib/mail.js';
 import { defectFrequencies, type AlertEvidence, type DefectFrequencies } from './SensorSimulator.js';
 
 export interface EdgeReadingInput {
@@ -211,6 +212,18 @@ export async function processEdgeReading(
         evidence: buildEvidence(mlLabel, mlConfidence, vibrationFFT, effectiveRpm, rms, kurtosisOf(input.signal), peakAbs),
       });
       await newAlert.save();
+
+      void notifyMailAlert({
+        machineId: machine.machineId,
+        machineName: machine.name,
+        severity,
+        message: newAlert.message,
+        technicianSummary,
+        prevention: preventionTips,
+        anomalyScore: bpfoScore,
+        estimatedTimeToFailure: severity === 'critical' ? '6-18 hours' : '3-7 days',
+        detectedAt: newAlert.detectedAt,
+      });
 
       if (io) {
         const obj = newAlert.toObject();

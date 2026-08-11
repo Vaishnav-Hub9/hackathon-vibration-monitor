@@ -1,11 +1,12 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import DashLayout from '@/components/layout/DashLayout';
 import { sensorNodes } from '@/data/mockData';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Slider } from '@/components/ui/slider';
-import { Save, Plus, BellRing, Settings as SettingsIcon, Factory, CheckCircle2 } from 'lucide-react';
+import { Save, Plus, BellRing, Settings as SettingsIcon, Factory, CheckCircle2, Mail } from 'lucide-react';
+import { authApi, alertsApi } from '@/lib/api';
 
 export default function Settings() {
   const [anomalyWarning, setAnomalyWarning] = useState([0.35]);
@@ -14,8 +15,21 @@ export default function Settings() {
   const [tempCritical, setTempCritical] = useState([70]);
   const [vibWarning, setVibWarning] = useState([1.5]);
   const [vibCritical, setVibCritical] = useState([3.0]);
+  const [alertEmail, setAlertEmail] = useState('');
+  const [sendingTest, setSendingTest] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Load the user's current alert email from the profile.
+  useEffect(() => {
+    authApi
+      .me()
+      .then((res) => {
+        const user = res.data?.data ?? {};
+        setAlertEmail(user.alertEmail || user.email || '');
+      })
+      .catch(() => {});
+  }, []);
 
   const notify = useCallback((msg: string) => {
     setToast(msg);
@@ -24,7 +38,26 @@ export default function Settings() {
   }, []);
 
   const saveThresholds = () => notify(`Thresholds saved — anomaly warn ${anomalyWarning[0]}, crit ${anomalyCritical[0]}`);
-  const saveNotifications = () => notify('Notification settings saved');
+  const saveNotifications = async () => {
+    try {
+      await authApi.updateMe({ alertEmail });
+      notify(alertEmail ? `Alert email saved — warnings will go to ${alertEmail}` : 'Alert email cleared — using your account email');
+    } catch {
+      notify('Failed to save alert email');
+    }
+  };
+
+  const sendTestEmail = async () => {
+    setSendingTest(true);
+    try {
+      await alertsApi.sendTestEmail();
+      notify(`Test alert email sent to ${alertEmail || 'your alert recipients'}`);
+    } catch (err: any) {
+      notify(err?.response?.data?.error || 'Failed to send test email');
+    } finally {
+      setSendingTest(false);
+    }
+  };
   const saveProfile = () => notify('Factory profile saved');
   const addNode = () => notify('Coming soon: edge node provisioning is handled at the gateway');
   const configureNode = (id: string) => notify(`Opening configuration for node ${id}`);
@@ -171,14 +204,29 @@ export default function Settings() {
 
               <div className="space-y-6">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-300">Primary WhatsApp Number</label>
-                  <Input defaultValue="+91 98765 43210" className="bg-[#0A0E1A] border-navy text-white max-w-xs font-mono-data" />
-                  <p className="text-xs text-slate-500">Must be registered with WhatsApp Business API</p>
+                  <label className="text-sm font-medium text-slate-300">Alert Email</label>
+                  <Input
+                    type="email"
+                    value={alertEmail}
+                    onChange={(e) => setAlertEmail(e.target.value)}
+                    placeholder="you@example.com"
+                    className="bg-[#0A0E1A] border-navy text-white max-w-xs font-mono-data"
+                  />
+                  <p className="text-xs text-slate-500">Warnings and critical alerts are emailed here (falls back to your account email)</p>
+                  <Button
+                    onClick={sendTestEmail}
+                    disabled={sendingTest}
+                    className="mt-3 border border-amber/40 text-amber hover:bg-amber/10 font-semibold"
+                    variant="outline"
+                  >
+                    <Mail className="w-4 h-4 mr-2" />
+                    {sendingTest ? 'Sending…' : 'Send Test Alert Email'}
+                  </Button>
                 </div>
 
                 <div className="space-y-4 pt-4 border-t border-navy/50">
                   {[
-                    { label: 'Enable WhatsApp Alerts', desc: 'Send immediate messages for warning and critical events', checked: true },
+                    { label: 'Enable Email Alerts', desc: 'Send immediate emails for warning and critical events', checked: true },
                     { label: 'Critical Only', desc: 'Only send alerts when ETF is < 24 hours', checked: false },
                     { label: 'Daily Summary', desc: 'Receive a digest of fleet health every morning at 8 AM', checked: true },
                   ].map((setting, i) => (

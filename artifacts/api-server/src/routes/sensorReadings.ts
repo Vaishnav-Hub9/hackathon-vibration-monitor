@@ -5,6 +5,8 @@ import { SpindleReading } from "../models/SpindleReading.js";
 import { Alert, AlertEvidence } from "../models/Alert.js";
 import { Machine } from "../models/Machine.js";
 import { augmentFromDataset } from "../lib/datasetAugmentation.js";
+import { getPreventionTips } from "../lib/prevention.js";
+import { notifyMailAlert } from "../lib/mail.js";
 
 const router = Router();
 
@@ -390,6 +392,18 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
           ...(evidence ? { evidence } : {}),
         });
         await newAlert.save();
+
+        void notifyMailAlert({
+          machineId,
+          machineName: machine?.name ?? machineId,
+          severity,
+          message: newAlert.message,
+          technicianSummary,
+          prevention: mlFault ? getPreventionTips(mlLabel) : undefined,
+          anomalyScore,
+          estimatedTimeToFailure: severity === "critical" ? "6-18 hours" : "3-7 days",
+          detectedAt: newAlert.detectedAt,
+        });
 
         if (io) {
           const obj = newAlert.toObject();

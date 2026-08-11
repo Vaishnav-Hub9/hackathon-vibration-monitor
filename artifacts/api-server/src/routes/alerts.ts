@@ -2,9 +2,35 @@ import { Router, Request, Response } from 'express';
 import { Alert } from '../models/Alert.js';
 import { authenticateJWT } from '../middleware/auth.js';
 import { Machine } from '../models/Machine.js';
+import { notifyMailAlert, isMailConfigured, type MailAlertPayload } from '../lib/mail.js';
 
 const router = Router();
 router.use(authenticateJWT);
+
+// Fire a sample warning email immediately to every configured recipient —
+// used by Settings -> Notifications -> "Send Test Alert Email" for demos.
+router.post('/test-email', async (_req: Request, res: Response): Promise<void> => {
+  if (!isMailConfigured()) {
+    res.status(503).json({
+      success: false,
+      error: 'Email delivery not configured — set SMTP_USER / SMTP_PASS in the api-server .env',
+    });
+    return;
+  }
+  const payload: MailAlertPayload = {
+    machineId: 'M004',
+    machineName: 'Bearing #4 - Conveyor Line A',
+    severity: 'critical',
+    message: 'OUTER RACE fault detected with 94.2% confidence (test alert).',
+    technicianSummary: 'Outer race spalling likely; plan bearing replacement within shift.',
+    prevention: ['Replace bearing', 'Check lubrication'],
+    anomalyScore: 0.87,
+    estimatedTimeToFailure: '6-18 hours',
+    detectedAt: new Date(),
+  };
+  await notifyMailAlert(payload);
+  res.json({ success: true });
+});
 
 router.get('/', async (req: Request, res: Response): Promise<void> => {
   try {

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useLocation, Link } from 'wouter';
-import { Activity, User, Mail, Lock, Factory, Phone, AlertCircle } from 'lucide-react';
+import { Activity, User, Mail, Lock, Factory, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { authApi } from '@/lib/api';
@@ -8,7 +8,7 @@ import { authApi } from '@/lib/api';
 export default function Register() {
   const [, setLocation] = useLocation();
   const [formData, setFormData] = useState({
-    name: '', email: '', factory: '', phone: '', password: '', confirm: ''
+    name: '', email: '', factory: '', alertEmail: '', password: '', confirm: ''
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -26,7 +26,8 @@ export default function Register() {
         name: formData.name,
         email: formData.email,
         password: formData.password,
-        role: 'operator'
+        role: 'operator',
+        alertEmail: formData.alertEmail
       });
       const { token, user } = res.data.data;
       localStorage.setItem('token', token);
@@ -104,10 +105,10 @@ export default function Register() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-xs font-medium text-slate-300">Phone Number (WhatsApp)</label>
+              <label className="text-xs font-medium text-slate-300">Alert Email (optional)</label>
               <div className="relative">
-                <Phone className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
-                <Input name="phone" onChange={handleChange} className="pl-9 bg-[#0A0E1A] border-navy text-white h-10" />
+                <Mail className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
+                <Input type="email" name="alertEmail" onChange={handleChange} className="pl-9 bg-[#0A0E1A] border-navy text-white h-10" />
               </div>
             </div>
 
