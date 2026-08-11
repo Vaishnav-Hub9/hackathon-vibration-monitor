@@ -76,6 +76,37 @@ amplitudes in the vibration range it was trained on (spectral shape — the faul
 signature — is preserved). If the ML server is unreachable, the reading still
 ingests with the heuristic score; ML is an enhancement, never a blocker.
 
+## Vibration capture mode (optional — trend only, read this)
+
+The mode toggle next to the node selector switches capture from the **mic**
+(default, spectral) to the **raw accelerometer** (📳 Vibration). Vibration mode
+buffers `devicemotion` samples into a **2048-point signal** (with timestamps,
+so the true sample rate is measured, not assumed) and sends it through the same
+ML relay as the audio waveform.
+
+**Honest sample-rate limit (say this to evaluators):**
+
+- Phone accelerometers deliver only **~60–100 Hz** (Nyquist ≈ 30–50 Hz).
+- BPFO at spindle speeds is **~180 Hz** and 1× RPM is **~250 Hz** — far above
+  Nyquist, so the model's fault-frequency band features are **out of range** in
+  this mode.
+- The ML verdict therefore uses **time-domain energy / RMS only** — useful for
+  the healthy/warning/critical trend, NOT for naming the fault. Expect low
+  confidence and treat "Imbalance"-type labels here as "high energy", not a
+  diagnosis.
+- Because of the low rate, a full 2048-sample window takes **~20–34 s** — the
+  app shows a progress bar and stops automatically at 2048 samples (40 s cap).
+
+This is why **audio is the primary capture mode**: the mic's 44.1 kHz sample
+rate covers all fault harmonics, which is what makes the spectral verdicts
+reliable. Vibration mode exists to demonstrate the trade-off and to cover the
+case where the machine is too loud/remote to hear.
+
+The backend accepts the vibration reading identically (fields `signal`, `rpm`,
+`sampleRate`, `captureMethod: "vibration"`); the ML server also now answers
+gracefully (low-confidence Healthy) if the phone ever reports a broken
+sample-rate estimate.
+
 ## API endpoints used
 
 | Endpoint | Purpose |
@@ -88,9 +119,12 @@ ingests with the heuristic score; ML is an enhancement, never a blocker.
 ## Honest claims for evaluators
 
 - **Acoustic BPFO spike detection** — primary signal, ~85% accuracy at close
-  range (<5 cm).
+  range (<5 cm). The mic's 44.1 kHz sample rate covers every fault harmonic.
 - **Vibration RMS** — trend only (±0.15 g vs calibrated MEMS); thresholds
   are 1.5 g (warning) and 3.0 g (critical).
+- **Vibration capture mode** — 2048 samples at the accelerometer's ~60–100 Hz
+  means the model sees time-domain energy only; fault-frequency bands are
+  above the sensor's Nyquist limit (see the dedicated section above).
 - **Temperature & voltage are dataset-augmented** (CWRU health-stage mapping),
   NOT live measurements — disclose this. Live temperature needs a
   Bluetooth thermometer (~₹500) in production.

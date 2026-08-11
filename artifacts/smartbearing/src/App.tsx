@@ -12,6 +12,7 @@ import MachineDetail from "@/pages/MachineDetail";
 import Predictions from "@/pages/Predictions";
 import Alerts from "@/pages/Alerts";
 import Analytics from "@/pages/Analytics";
+import MlAnalysis from "@/pages/MlAnalysis";
 import Settings from "@/pages/Settings";
 import DigitalTwin from "@/pages/DigitalTwin";
 import Workflow from "@/pages/Workflow";
@@ -48,6 +49,7 @@ function Router() {
       <Route path="/predictions" component={() => <ProtectedRoute component={Predictions} />} />
       <Route path="/alerts" component={() => <ProtectedRoute component={Alerts} />} />
       <Route path="/analytics" component={() => <ProtectedRoute component={Analytics} />} />
+      <Route path="/ml-analysis" component={() => <ProtectedRoute component={MlAnalysis} />} />
       <Route path="/settings" component={() => <ProtectedRoute component={Settings} />} />
       <Route component={NotFound} />
     </Switch>

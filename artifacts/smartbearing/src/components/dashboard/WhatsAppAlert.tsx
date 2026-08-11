@@ -89,13 +89,15 @@ export default function WhatsAppAlert() {
 
   return (
     <>
-      {/* Floating trigger button */}
+      {/* Floating trigger button — always visible (initial={false} can never leave
+          it stuck at scale 0 in a throttled tab); left corner so it never
+          overlaps the Fleet Copilot launcher on the right. */}
       <motion.button
-        initial={{ scale: 0, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{ delay: 1, type: 'spring' }}
+        initial={false}
+        whileHover={{ y: -2 }}
+        whileTap={{ scale: 0.96 }}
         onClick={() => show(0)}
-        className="fixed bottom-6 right-6 z-40 flex items-center gap-2 bg-[#25D366] hover:bg-[#1ebe5d] text-white text-xs font-bold px-4 py-2.5 rounded-full shadow-[0_4px_20px_rgba(37,211,102,0.35)] transition-colors"
+        className="fixed bottom-6 left-6 z-40 flex items-center gap-2 bg-[#25D366] hover:bg-[#1ebe5d] text-white text-xs font-bold px-4 py-2.5 rounded-full shadow-[0_4px_20px_rgba(37,211,102,0.35)] transition-colors"
         title="WhatsApp alert"
       >
         <MessageCircle className="w-4 h-4" />
@@ -107,11 +109,11 @@ export default function WhatsAppAlert() {
         {visible && (
           <motion.div
             key="wa-alert"
-            initial={{ opacity: 0, y: 80, scale: 0.92 }}
+            initial={{ opacity: 0.98, y: 12, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 60, scale: 0.92 }}
             transition={{ type: 'spring', stiffness: 320, damping: 28 }}
-            className="fixed bottom-20 right-6 z-50 w-[340px] max-w-[calc(100vw-3rem)] rounded-2xl overflow-hidden shadow-2xl border flex flex-col"
+            className="fixed bottom-20 left-6 z-50 w-[340px] max-w-[calc(100vw-3rem)] rounded-2xl overflow-hidden shadow-2xl border flex flex-col"
             style={{
               background: '#0E1621',
               borderColor: isCritical ? 'rgba(234,88,12,0.4)' : 'rgba(245,158,11,0.35)',

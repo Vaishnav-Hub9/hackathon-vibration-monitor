@@ -30,11 +30,12 @@ interface ChatMessage {
 }
 
 const QUICK_PROMPTS = [
-  'Which machine is at highest risk right now?',
+  'Highest risk machine now?',
   'Why did M003 alert?',
   'What is the fleet health?',
   'How much have we saved?',
-  'What fault does the model see most?',
+  'Top fault the model sees?',
+  'How does detection work?',
 ];
 
 const TONE_COLOR = { ok: '#10B981', warn: '#F59E0B', crit: '#EA580C' };
@@ -290,11 +291,12 @@ export default function FleetCopilot({ ctx }: { ctx: CopilotCtx }) {
 
   return (
     <>
-      {/* Launcher */}
+      {/* Launcher — always visible: initial={false} renders at the final values,
+          so a throttled/background tab can never leave it stuck at scale 0. */}
       <motion.button
-        initial={{ scale: 0, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{ delay: 0.8, type: 'spring', stiffness: 300, damping: 20 }}
+        initial={false}
+        whileHover={{ y: -2 }}
+        whileTap={{ scale: 0.96 }}
         onClick={() => setOpen((v) => !v)}
         className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-gradient-to-br from-amber to-[#EA580C] text-navy font-bold text-sm pl-4 pr-5 py-3 rounded-full shadow-[0_8px_30px_rgba(245,158,11,0.4)] hover:shadow-[0_8px_40px_rgba(245,158,11,0.6)] hover:-translate-y-0.5 transition-all"
         aria-label="Ask Your Fleet"
@@ -310,7 +312,7 @@ export default function FleetCopilot({ ctx }: { ctx: CopilotCtx }) {
       <AnimatePresence>
         {open && (
           <motion.div
-            initial={{ opacity: 0, y: 24, scale: 0.96 }}
+            initial={false}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 24, scale: 0.96 }}
             transition={{ type: 'spring', stiffness: 300, damping: 28 }}
@@ -383,13 +385,14 @@ export default function FleetCopilot({ ctx }: { ctx: CopilotCtx }) {
               )}
             </div>
 
-            {/* Quick prompts */}
-            <div className="px-3 pb-2 flex gap-1.5 overflow-x-auto">
-              {QUICK_PROMPTS.slice(0, 3).map((p) => (
+            {/* Quick prompts — all six as a tidy 2×3 grid so every capability
+                is visible at a glance without crowding the message area */}
+            <div className="px-3 pb-2 grid grid-cols-2 gap-1.5">
+              {QUICK_PROMPTS.map((p) => (
                 <button
                   key={p}
                   onClick={() => send(p)}
-                  className="flex-shrink-0 text-[11px] text-slate-300 bg-[#141E35] border border-navy hover:border-amber/40 hover:text-amber px-2.5 py-1.5 rounded-full transition-colors"
+                  className="text-[10px] leading-tight text-left text-slate-300 bg-[#141E35] border border-navy hover:border-amber/40 hover:text-amber px-2 py-1.5 rounded-lg transition-colors"
                 >
                   {p}
                 </button>

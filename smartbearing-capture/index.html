@@ -27,6 +27,45 @@
     label { font-size: 12px; color: #64748b; text-transform: uppercase;
             letter-spacing: .05em; margin-bottom: 6px; display: block; }
 
+    /* Capture mode toggle */
+    .mode-toggle {
+      display: flex; width: 100%; max-width: 360px;
+      background: #141E35; border: 1px solid #1E2D4A;
+      border-radius: 10px; padding: 4px; margin-bottom: 16px;
+    }
+    .mode-btn {
+      flex: 1; padding: 10px; border: none; background: transparent;
+      color: #64748b; font-size: 14px; font-weight: 600;
+      border-radius: 8px; cursor: pointer;
+    }
+    .mode-btn.active { background: #F59E0B; color: #0A0E1A; }
+
+    /* Honest physics note (vibration mode) */
+    .note {
+      width: 100%; max-width: 360px; font-size: 12px; color: #94A3B8;
+      background: rgba(245,158,11,.08); border: 1px solid rgba(245,158,11,.25);
+      border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; line-height: 1.5;
+    }
+    .note b { color: #F59E0B; }
+
+    /* Vibration capture progress bar */
+    .vib-progress {
+      width: 100%; max-width: 360px; height: 26px;
+      background: #0F1629; border: 1px solid #1E2D4A;
+      border-radius: 8px; position: relative; margin-bottom: 16px;
+      overflow: hidden;
+    }
+    .vib-progress-fill {
+      height: 100%; width: 0%;
+      background: linear-gradient(90deg, #F59E0B, #EA580C);
+      transition: width .2s;
+    }
+    .vib-progress-label {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-family: monospace; color: #e2e8f0;
+    }
+
     /* Big record button */
     #recordBtn {
       width: 120px; height: 120px; border-radius: 50%;
@@ -125,8 +164,29 @@
     </select>
   </div>
 
-  <!-- FFT display -->
+  <!-- Capture mode: mic audio (spectral) or raw accelerometer (trend) -->
+  <div class="mode-toggle">
+    <button class="mode-btn active" data-mode="audio" onclick="setMode('audio')">🎤 Audio</button>
+    <button class="mode-btn" data-mode="vibration" onclick="setMode('vibration')">📳 Vibration</button>
+  </div>
+
+  <!-- Honest physics note — shown in vibration mode -->
+  <div id="vibNote" class="note" style="display:none">
+    <b>Sample-rate limit:</b> phone accelerometers deliver only ~60–100 Hz
+    (Nyquist ≈ 30–50 Hz) — BPFO (~180 Hz) and 1× RPM (~250 Hz) are far above
+    that, so the ML verdict here uses <b>time-domain energy / RMS only</b>; the
+    fault-frequency bands are out of range. Vibration is a <b>trend</b> signal,
+    not a spectral one. Expect a longer capture (~30 s).
+  </div>
+
+  <!-- FFT display (audio mode) -->
   <canvas id="fftCanvas"></canvas>
+
+  <!-- Vibration capture progress (vibration mode) -->
+  <div id="vibProgress" class="vib-progress" style="display:none">
+    <div class="vib-progress-fill" id="vibProgressFill"></div>
+    <span class="vib-progress-label" id="vibProgressLabel">0 / 2048 samples</span>
+  </div>
 
   <!-- Record button -->
   <button id="recordBtn" onclick="toggleRecord()">
@@ -138,24 +198,24 @@
   <!-- Live readings -->
   <div class="readings">
     <div class="reading-card">
-      <div class="reading-label">Vibration RMS</div>
+      <div class="reading-label" id="vibLabel">Vibration RMS</div>
       <div class="reading-value" id="vibVal" style="color:#F59E0B">—</div>
-      <div class="reading-unit">g</div>
+      <div class="reading-unit" id="vibUnit">g</div>
     </div>
     <div class="reading-card">
-      <div class="reading-label">Acoustic Score</div>
+      <div class="reading-label" id="acLabel">Acoustic Score</div>
       <div class="reading-value" id="acVal" style="color:#3B82F6">—</div>
-      <div class="reading-unit">normalised</div>
+      <div class="reading-unit" id="acUnit">normalised</div>
     </div>
     <div class="reading-card">
-      <div class="reading-label">BPFO Peak</div>
+      <div class="reading-label" id="bpfoLabel">BPFO Peak</div>
       <div class="reading-value" id="bpfoVal" style="color:#EA580C">—</div>
-      <div class="reading-unit">Hz</div>
+      <div class="reading-unit" id="bpfoUnit">Hz</div>
     </div>
     <div class="reading-card">
-      <div class="reading-label">Anomaly Score</div>
+      <div class="reading-label" id="anomLabel">Anomaly Score</div>
       <div class="reading-value" id="anomalyVal" style="color:#10B981">—</div>
-      <div class="reading-unit">/ 1.0</div>
+      <div class="reading-unit" id="anomUnit">/ 1.0</div>
     </div>
   </div>
 
@@ -178,7 +238,13 @@
 const API_BASE = 'http://localhost:5000';
 const SAMPLE_RATE = 44100;
 const FFT_SIZE = 4096;
-const CAPTURE_DURATION_MS = 4000;  // 4-second capture burst
+const CAPTURE_DURATION_MS = 4000;  // 4-second capture burst (audio mode)
+
+// Vibration mode — the ML relay needs exactly 2048 samples. Phone
+// accelerometers run at ~60–100 Hz, so 2048 samples takes ~20–34 s.
+const VIB_TARGET_SAMPLES = 2048;
+const VIB_TIMEOUT_MS = 40000;  // safety cap if the device reports slower
+const GRAVITY = 9.81;          // m/s² — used to remove the DC gravity offset
 
 // Bearing geometry — 6205 deep-groove ball bearing
 // Outer diameter: ~52mm, bore: 25mm, 8 balls, ball dia: 7.94mm
@@ -209,7 +275,6 @@ function calcBPFO(rpm) {
 let audioCtx = null;
 let analyser = null;
 let micStream = null;
-let accelSamples = [];
 let accelHandler = null;
 let recordTimer = null;
 let isRecording = false;
@@ -217,6 +282,13 @@ let captureResult = null;
 let animFrame = null;
 let lastTimeWindow = null;   // latest raw mic waveform (fftSize samples) → ML inference
 let micSampleRate = SAMPLE_RATE;
+
+// Capture mode: 'audio' (mic FFT — spectral, primary) | 'vibration' (raw
+// accelerometer buffer — trend only, honest Nyquist limit documented in UI)
+let captureMode = 'audio';
+let vibTimer = null;             // rAF loop driving the vibration progress bar
+let accelSamples = [];           // { ts, val } — gravity-removed m/s² samples
+let accelTotalDtMs = 0;          // measured inter-sample time → true sample rate
 
 // Calibration baseline (noise floor) for the selected machine.
 // Captured ONCE per machine with the machine OFF. When present, raw
@@ -238,6 +310,7 @@ const CH = canvas.offsetHeight;
 // ═══════════════════════════════════════════════
 function startAccelerometer() {
   accelSamples = [];
+  accelTotalDtMs = 0;
   
   // DeviceMotion API — works on HTTPS or localhost
   // Permission required on iOS 13+
@@ -253,15 +326,23 @@ function startAccelerometer() {
 
 function listenAccel() {
   accelHandler = (e) => {
-    const a = e.accelerationIncludingGravity;
-    if (!a) return;
-    // Store raw magnitude; gravity is removed in computeVibrationRMS
-    const mag = Math.sqrt(
-      (a.x||0)*(a.x||0) + 
-      (a.y||0)*(a.y||0) + 
-      (a.z||0)*(a.z||0)
-    );
-    accelSamples.push(mag);
+    const now = performance.now();
+    const incl = e.accelerationIncludingGravity;
+    const free = e.acceleration;   // gravity already removed by the OS (when provided)
+    let val = null;
+    if (free && Number.isFinite(free.x) && Number.isFinite(free.y) && Number.isFinite(free.z)) {
+      val = Math.sqrt(free.x*free.x + free.y*free.y + free.z*free.z);
+    } else if (incl) {
+      // Fallback: signed envelope around gravity so the signal is ~zero-mean
+      const mag = Math.sqrt((incl.x||0)**2 + (incl.y||0)**2 + (incl.z||0)**2);
+      val = mag - GRAVITY;
+    }
+    if (val === null || !Number.isFinite(val)) return;
+    if (accelSamples.length > 0) {
+      const dt = now - accelSamples[accelSamples.length - 1].ts;
+      if (dt > 0 && dt < 500) accelTotalDtMs += dt;  // ignore glitchy large gaps
+    }
+    accelSamples.push({ ts: now, val });
   };
   window.addEventListener('devicemotion', accelHandler);
 }
@@ -275,13 +356,94 @@ function stopAccelerometer() {
 
 function computeVibrationRMS() {
   if (accelSamples.length === 0) return 0;
-  // Remove gravity (approx 9.81 m/s² = 1g)
-  const GRAVITY = 9.81;
-  const filtered = accelSamples.map(v => Math.abs(v - GRAVITY));
-  const sumSq = filtered.reduce((s, v) => s + v * v, 0);
-  const rmsMs2 = Math.sqrt(sumSq / filtered.length);
-  // Convert m/s² → g (1g = 9.81 m/s²)
-  return rmsMs2 / GRAVITY;
+  // Samples are already gravity-removed (m/s²) → RMS in g units
+  const sumSq = accelSamples.reduce((s, smp) => s + smp.val * smp.val, 0);
+  return Math.sqrt(sumSq / accelSamples.length) / GRAVITY;
+}
+
+// ═══════════════════════════════════════════════
+// VIBRATION MODE — 2048-pt accelerometer window for the ML relay
+// ═══════════════════════════════════════════════
+function buildVibrationSignal() {
+  if (accelSamples.length === 0) return null;
+  
+  // True sample rate from measured event timestamps (DeviceMotion is
+  // OS-limited to ~60–100 Hz — never assume a nominal rate).
+  let sampleRate = 60;
+  if (accelSamples.length > 1 && accelTotalDtMs > 0) {
+    sampleRate = (accelSamples.length - 1) / (accelTotalDtMs / 1000);
+  }
+  sampleRate = Math.max(1, Math.round(sampleRate * 10) / 10);
+  
+  // Exactly 2048 points: keep the most recent samples, zero-pad if the
+  // capture ran short of the target (e.g. slow device). The ML relay
+  // validates the exact length before forwarding to /predict.
+  const window = accelSamples.map(s => s.val).slice(-VIB_TARGET_SAMPLES);
+  const norm = normalizeSignal(window);
+  while (norm.length < VIB_TARGET_SAMPLES) norm.push(0);
+  
+  return { signal: norm, sampleRate };
+}
+
+function startVibrationCapture() {
+  accelSamples = [];
+  accelTotalDtMs = 0;
+  isRecording = true;
+  captureResult = null;
+  
+  startAccelerometer();
+  
+  document.getElementById('recordBtn').classList.add('recording');
+  document.getElementById('recLabel').textContent = 'STOP';
+  document.getElementById('sendBtn').style.display = 'none';
+  document.getElementById('baselineBtn').style.display = 'none';
+  
+  setStatus('📳 Capturing vibration... hold the phone firmly on the housing (~30 s)', 'recording');
+  
+  // Drive the progress bar until 2048 samples arrive (or the timeout fires)
+  const update = () => {
+    const n = accelSamples.length;
+    const pct = Math.min(100, Math.round(n / VIB_TARGET_SAMPLES * 100));
+    document.getElementById('vibProgressFill').style.width = pct + '%';
+    document.getElementById('vibProgressLabel').textContent = `${n} / ${VIB_TARGET_SAMPLES} samples`;
+    document.getElementById('recTimer').textContent = `${Math.round(accelTotalDtMs / 1000)}s`;
+    if (n >= VIB_TARGET_SAMPLES) { stopCapture(); return; }
+    vibTimer = requestAnimationFrame(update);
+  };
+  vibTimer = requestAnimationFrame(update);
+  
+  // Safety cap — slower devices may not reach 2048 samples in 40 s
+  recordTimer = setTimeout(() => stopCapture(), VIB_TIMEOUT_MS);
+}
+
+// ═══════════════════════════════════════════════
+// CAPTURE MODE TOGGLE (audio ⇄ vibration)
+// ═══════════════════════════════════════════════
+function setMode(mode) {
+  if (isRecording) return;  // don't switch mid-capture
+  captureMode = mode;
+  document.querySelectorAll('.mode-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.mode === mode));
+  
+  const isVib = mode === 'vibration';
+  document.getElementById('vibNote').style.display = isVib ? 'block' : 'none';
+  document.getElementById('vibProgress').style.display = isVib ? 'block' : 'none';
+  document.getElementById('vibProgressFill').style.width = '0%';
+  document.getElementById('vibProgressLabel').textContent = `0 / ${VIB_TARGET_SAMPLES} samples`;
+  document.getElementById('fftCanvas').style.display = isVib ? 'none' : 'block';
+  document.getElementById('baselineBtn').style.display = 'none';
+  
+  // Restore the audio-mode card labels when switching back
+  if (!isVib) {
+    document.getElementById('acLabel').textContent = 'Acoustic Score';
+    document.getElementById('acUnit').textContent = 'normalised';
+    document.getElementById('bpfoLabel').textContent = 'BPFO Peak';
+    document.getElementById('bpfoUnit').textContent = 'Hz';
+  }
+  
+  setStatus(isVib
+    ? 'Vibration mode: hold the phone firmly on the housing. Capture runs until 2048 samples (~30 s) are collected.'
+    : 'Tap RECORD and hold the phone against the bearing housing', 'info');
 }
 
 // ═══════════════════════════════════════════════
@@ -445,6 +607,11 @@ async function toggleRecord() {
 }
 
 async function startCapture() {
+  if (captureMode === 'vibration') {
+    startVibrationCapture();
+    return;
+  }
+  
   setStatus('Requesting microphone access...', 'info');
   const ok = await startMicrophone();
   if (!ok) return;
@@ -481,6 +648,7 @@ async function startCapture() {
 function stopCapture() {
   if (recordTimer) { clearTimeout(recordTimer); recordTimer = null; }
   if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null; }
+  if (vibTimer) { cancelAnimationFrame(vibTimer); vibTimer = null; }
   
   isRecording = false;
   document.getElementById('recordBtn').classList.remove('recording');
@@ -490,13 +658,19 @@ function stopCapture() {
   // Compute final readings from snapshots
   const vibRMS = computeVibrationRMS();
   stopAccelerometer();
-  stopMicrophone();
+  if (captureMode === 'audio') stopMicrophone();
   
-  // Raw BPFO score (mean amplitude in BPFO window over capture)
+  // Vibration mode with no accelerometer data → tell the user, don't guess
+  if (captureMode === 'vibration' && accelSamples.length === 0) {
+    setStatus('⚠️ No accelerometer data received. Device motion permission was denied or is unavailable — vibration mode needs it.', 'error');
+    return;
+  }
+  
+  // Raw BPFO score (mean amplitude in BPFO window over capture) — audio mode only
   const rawBpfo = bpfoSnapshots.length ? 
     bpfoSnapshots.reduce((s,v) => s+v, 0) / bpfoSnapshots.length : 0;
   
-  // Raw acoustic level
+  // Raw acoustic level — audio mode only
   const rawAcoustic = acousticSnapshots.length ?
     acousticSnapshots.reduce((s,v) => s+v, 0) / acousticSnapshots.length : 0;
   
@@ -551,6 +725,23 @@ function computeResult(machineId, nodeId, vibRMS) {
   const etf = anomalyScore > 0.60 ? '6–18 hours' :
               anomalyScore > 0.30 ? '3–7 days' : '> 30 days';
   
+  // Raw time-domain window → real ML verdict (backend relays to /predict).
+  // Audio mode: 2048 mic samples at the context's actual sample rate.
+  // Vibration mode: 2048 accelerometer samples at the MEASURED rate
+  // (~60–100 Hz — above that Nyquist, only time-domain features are valid;
+  // see the in-app note).
+  let signal, sampleRate;
+  let vibrationSamples = 0;
+  if (captureMode === 'vibration') {
+    const v = buildVibrationSignal();
+    signal = v ? v.signal : undefined;
+    sampleRate = v ? v.sampleRate : 60;
+    vibrationSamples = accelSamples.length;
+  } else {
+    signal = lastTimeWindow ? normalizeSignal(lastTimeWindow.slice(0, 2048)) : undefined;
+    sampleRate = micSampleRate || SAMPLE_RATE;
+  }
+  
   // Augment with dataset values for channels we don't have
   return {
     nodeId,
@@ -567,22 +758,39 @@ function computeResult(machineId, nodeId, vibRMS) {
     temperature: augmentTemperature(healthScore),
     voltage: augmentVoltage(),
     fftSnapshot: bpfoSnapshots.slice(0, 40),  // 40 points for FFT chart
-    // Raw mic waveform → real ML verdict (backend relays to /predict)
-    signal: lastTimeWindow ? normalizeSignal(lastTimeWindow.slice(0, 2048)) : undefined,
+    signal,
     rpm: SPINDLE_RPM[machineId] || 13000,
-    sampleRate: micSampleRate || SAMPLE_RATE,
+    sampleRate,
+    vibrationSamples,
     timestamp: new Date().toISOString(),
     capturedBy: 'smartphone',
-    captureMethod: 'audio+accelerometer'
+    captureMethod: captureMode === 'vibration' ? 'vibration' : 'audio+accelerometer',
+    captureMode
   };
 }
 
 function renderResult() {
   if (!captureResult) return;
   
-  // Update UI
+  // Update UI — vibration mode replaces the acoustic/BPFO cards with the
+  // measured sample rate and sample count (more honest than fake FFT values)
+  const isVib = captureResult.captureMode === 'vibration';
   document.getElementById('vibVal').textContent = captureResult.vibrationRMS.toFixed(3);
-  document.getElementById('acVal').textContent = captureResult.acousticLevel.toFixed(3);
+  if (isVib) {
+    document.getElementById('acLabel').textContent = 'Sample Rate';
+    document.getElementById('acUnit').textContent = 'Hz';
+    document.getElementById('acVal').textContent = captureResult.sampleRate.toFixed(1);
+    document.getElementById('bpfoLabel').textContent = 'Samples';
+    document.getElementById('bpfoUnit').textContent = 'collected';
+    document.getElementById('bpfoVal').textContent = String(captureResult.vibrationSamples);
+  } else {
+    document.getElementById('acLabel').textContent = 'Acoustic Score';
+    document.getElementById('acUnit').textContent = 'normalised';
+    document.getElementById('acVal').textContent = captureResult.acousticLevel.toFixed(3);
+    document.getElementById('bpfoLabel').textContent = 'BPFO Peak';
+    document.getElementById('bpfoUnit').textContent = 'Hz';
+    document.getElementById('bpfoVal').textContent = calcBPFO(captureResult.rpm).toFixed(1);
+  }
   document.getElementById('anomalyVal').textContent = captureResult.anomalyScore.toFixed(3);
   
   const badge = captureResult.status === 'critical' ? 'h-critical' : 
@@ -594,7 +802,8 @@ function renderResult() {
   );
   
   document.getElementById('sendBtn').style.display = 'block';
-  document.getElementById('baselineBtn').style.display = 'block';
+  // Baseline calibration is meaningful for the audio noise floor only
+  document.getElementById('baselineBtn').style.display = isVib ? 'none' : 'block';
 }
 
 // ═══════════════════════════════════════════════
@@ -710,6 +919,9 @@ async function sendToDashboard() {
       const json = await response.json();
       if (json.mlLabel && typeof json.mlConfidence === 'number') {
         mlText = ` · ML verdict: ${json.mlLabel.toUpperCase()} (${Math.round(json.mlConfidence * 100)}%)`;
+        if (captureResult.captureMode === 'vibration') {
+          mlText += ' — time-domain energy only; fault bands above the accelerometer Nyquist limit';
+        }
       }
     } catch (e) { /* non-JSON response — verdict not available */ }
     

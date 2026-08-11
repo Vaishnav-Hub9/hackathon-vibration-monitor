@@ -6,8 +6,8 @@ export interface AlertEvidence {
   dominantFreq: number;
   rpm: number;
   peaks: { freq: number; amplitude: number }[];
-  features: { rms: number; kurtosis: number; crestFactor: number };
-  defectFrequencies: { fr: number; bpfo: number; bpfi: number; bsf: number; ftf: number };
+  features?: { rms: number; kurtosis: number; crestFactor: number };
+  defectFrequencies?: { fr: number; bpfo: number; bpfi: number; bsf: number; ftf: number };
 }
 
 export interface IAlert extends Document {

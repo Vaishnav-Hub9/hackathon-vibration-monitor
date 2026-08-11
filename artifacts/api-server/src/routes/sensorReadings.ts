@@ -2,7 +2,7 @@ import { Router, Request, Response } from "express";
 import { getIo } from "../socket.js";
 import { logger } from "../lib/logger.js";
 import { SpindleReading } from "../models/SpindleReading.js";
-import { Alert } from "../models/Alert.js";
+import { Alert, AlertEvidence } from "../models/Alert.js";
 import { Machine } from "../models/Machine.js";
 import { augmentFromDataset } from "../lib/datasetAugmentation.js";
 
@@ -112,6 +112,9 @@ interface MlVerdict {
   mlLabel?: string;
   mlConfidence?: number;
   technicianSummary?: string;
+  features?: Record<string, number>;
+  probabilities?: Record<string, number>;
+  defectFrequencies?: { fr: number; bpfo: number; bpfi: number; bsf: number; ftf: number };
 }
 
 async function runMlInference(signal: number[], rpm: number, sampleRate: number): Promise<MlVerdict> {
@@ -131,16 +134,31 @@ async function runMlInference(signal: number[], rpm: number, sampleRate: number)
       label?: string;
       confidence?: number;
       technician_summary?: string;
+      features?: Record<string, number>;
+      probabilities?: Record<string, number>;
+      defect_frequencies?: { fr?: number; bpfo?: number; bpfi?: number; bsf?: number; ftf?: number };
     };
     if (
       typeof ml.label === "string" &&
       typeof ml.confidence === "number" &&
       Number.isFinite(ml.confidence)
     ) {
+      const df = ml.defect_frequencies;
       return {
         mlLabel: ml.label,
         mlConfidence: ml.confidence,
         technicianSummary: ml.technician_summary,
+        features: ml.features,
+        probabilities: ml.probabilities,
+        defectFrequencies: df
+          ? {
+              fr: df.fr ?? 0,
+              bpfo: df.bpfo ?? 0,
+              bpfi: df.bpfi ?? 0,
+              bsf: df.bsf ?? 0,
+              ftf: df.ftf ?? 0,
+            }
+          : undefined,
       };
     }
     return {};
@@ -223,7 +241,36 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
       signal = rawSignal as number[];
       mlVerdict = await runMlInference(signal, num(body.rpm, 14400), num(body.sampleRate, 44100));
     }
-    const { mlLabel, mlConfidence, technicianSummary } = mlVerdict;
+    const {
+      mlLabel,
+      mlConfidence,
+      technicianSummary,
+      features: mlFeatures,
+      probabilities: mlProbabilities,
+      defectFrequencies: mlDefect,
+    } = mlVerdict;
+
+    // Evidence pack from the REAL ML verdict — same shape the simulator writes,
+    // so the Alerts page's "View Evidence" panel works for phone captures too.
+    const evidence: AlertEvidence | undefined = mlLabel
+      ? {
+          label: mlLabel,
+          confidence: mlConfidence ?? 0,
+          dominantFreq: mlFeatures?.dominant_frequency ?? mlDefect?.fr ?? 0,
+          rpm: num(body.rpm, 14400),
+          peaks: fftSnapshot.length
+            ? fftSnapshot.slice(0, 10).map((amp, i) => ({ freq: (i + 1) * 50, amplitude: amp }))
+            : [],
+          features: mlFeatures
+            ? {
+                rms: +(mlFeatures.rms ?? 0).toFixed(3),
+                kurtosis: +(mlFeatures.kurtosis ?? 0).toFixed(2),
+                crestFactor: +(mlFeatures.crest_factor ?? 0).toFixed(2),
+              }
+            : undefined,
+          defectFrequencies: mlDefect ?? undefined,
+        }
+      : undefined;
 
     const reading: SensorReading = {
       nodeId,
@@ -265,7 +312,7 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
       accel_x: 0,
       accel_y: 0,
       accel_z: +vibrationRMS.toFixed(3),
-      rpm: 0,
+      rpm: num(body.rpm, 14400),
       vibrationFFT,
       acousticRMS: +acousticLevel.toFixed(3),
       temperature,
@@ -293,7 +340,7 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
         accel_x: 0,
         accel_y: 0,
         accel_z: +vibrationRMS.toFixed(3),
-        rpm: 0,
+        rpm: num(body.rpm, 14400),
         temperature,
         voltage,
         acousticLevel,
@@ -340,6 +387,7 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
               : `Vibration RMS elevated to ${vibrationRMS.toFixed(2)}g (smartphone capture). Monitor closely.`,
           ...(mlFault && technicianSummary ? { technicianSummary } : {}),
           anomalyScore,
+          ...(evidence ? { evidence } : {}),
         });
         await newAlert.save();
 
@@ -352,7 +400,9 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
             machineName: machine?.name ?? machineId,
             type: severity.toUpperCase(),
             message: obj.message,
+            technicianSummary: obj.technicianSummary,
             anomalyScore,
+            evidence: obj.evidence ?? null,
             timestamp: obj.detectedAt.toISOString().replace("T", " ").substring(0, 19),
             status: obj.status,
             estimatedTimeToFailure: severity === "critical" ? "6-18 hours" : "3-7 days",
@@ -380,6 +430,8 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
       mlLabel: mlLabel ?? null,
       mlConfidence: mlConfidence ?? null,
       technicianSummary: technicianSummary ?? null,
+      probabilities: mlProbabilities ?? null,
+      defectFrequencies: mlDefect ?? null,
     });
   } catch (err: any) {
     logger.error({ err }, "Failed to ingest smartphone sensor reading");
@@ -436,7 +488,10 @@ async function computeFleetSummary() {
   const alertsToday = await Alert.countDocuments({ detectedAt: { $gte: startOfDay } });
 
   const latestReadings = await SpindleReading.aggregate<{ healthScore: number }>([
+    // Bound the scan: the latest reading per node is always in the most recent
+    // 2000 readings (index-backed with $limit) — never sweep the whole table.
     { $sort: { timestamp: -1 } },
+    { $limit: 2000 },
     {
       $group: {
         _id: { machineId: "$machineId", spindleId: "$spindleId" },

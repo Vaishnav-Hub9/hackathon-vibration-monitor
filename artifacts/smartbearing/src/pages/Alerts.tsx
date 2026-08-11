@@ -18,8 +18,8 @@ type AlertEvidence = {
   dominantFreq: number;
   rpm: number;
   peaks: { freq: number; amplitude: number }[];
-  features: { rms: number; kurtosis: number; crestFactor: number };
-  defectFrequencies: { fr: number; bpfo: number; bpfi: number; bsf: number; ftf: number };
+  features?: { rms: number; kurtosis: number; crestFactor: number };
+  defectFrequencies?: { fr: number; bpfo: number; bpfi: number; bsf: number; ftf: number };
 };
 
 type Alert = {
@@ -252,7 +252,7 @@ export default function Alerts() {
                                     <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2">Triggering Spectrum (top peaks)</p>
                                     <div className="h-28">
                                       <ResponsiveContainer width="100%" height="100%">
-                                        <BarChart data={alert.evidence.peaks}>
+                                        <BarChart data={alert.evidence.peaks ?? []}>
                                           <XAxis dataKey="freq" stroke="#64748B" fontSize={9} tickFormatter={(v) => `${v}Hz`} />
                                           <YAxis stroke="#64748B" fontSize={9} />
                                           <Tooltip cursor={{ fill: '#1E2D4A' }} contentStyle={{ backgroundColor: '#0F1629', borderColor: '#1E2D4A' }} />
@@ -263,16 +263,19 @@ export default function Alerts() {
                                   </div>
                                   <div className="text-xs font-mono-data space-y-2 text-slate-400">
                                     <p className="text-slate-300 font-bold">
-                                      {alert.evidence.label} · {(alert.evidence.confidence * 100).toFixed(1)}% confidence
+                                      {alert.evidence.label ?? 'Unknown'} ·{' '}
+                                      {alert.evidence.confidence !== undefined
+                                        ? `${(alert.evidence.confidence * 100).toFixed(1)}% confidence`
+                                        : 'confidence unavailable'}
                                     </p>
                                     <div className="grid grid-cols-2 gap-2">
-                                      <span>RMS: <b className="text-white">{alert.evidence.features.rms} g</b></span>
-                                      <span>Kurtosis: <b className="text-white">{alert.evidence.features.kurtosis}</b></span>
-                                      <span>Crest: <b className="text-white">{alert.evidence.features.crestFactor}</b></span>
-                                      <span>RPM: <b className="text-white">{alert.evidence.rpm}</b></span>
+                                      <span>RMS: <b className="text-white">{alert.evidence.features?.rms?.toFixed(2) ?? '—'}</b> g</span>
+                                      <span>Kurtosis: <b className="text-white">{alert.evidence.features?.kurtosis?.toFixed(2) ?? '—'}</b></span>
+                                      <span>Crest: <b className="text-white">{alert.evidence.features?.crestFactor?.toFixed(2) ?? '—'}</b></span>
+                                      <span>RPM: <b className="text-white">{alert.evidence.rpm ?? '—'}</b></span>
                                     </div>
                                     <p className="pt-1 text-[11px]">
-                                      Defect freqs: BPFO <b className="text-[#EA580C]">{alert.evidence.defectFrequencies.bpfo.toFixed(0)}</b> · BPFI <b className="text-[#F59E0B]">{alert.evidence.defectFrequencies.bpfi.toFixed(0)}</b> · BSF <b className="text-[#A855F7]">{alert.evidence.defectFrequencies.bsf.toFixed(0)}</b> Hz
+                                      Defect freqs: BPFO <b className="text-[#EA580C]">{alert.evidence.defectFrequencies?.bpfo?.toFixed(0) ?? '—'}</b> · BPFI <b className="text-[#F59E0B]">{alert.evidence.defectFrequencies?.bpfi?.toFixed(0) ?? '—'}</b> · BSF <b className="text-[#A855F7]">{alert.evidence.defectFrequencies?.bsf?.toFixed(0) ?? '—'}</b> Hz
                                     </p>
                                   </div>
                                 </div>

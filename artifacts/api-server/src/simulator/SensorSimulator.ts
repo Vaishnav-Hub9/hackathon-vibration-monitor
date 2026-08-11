@@ -458,7 +458,9 @@ class SensorSimulator {
         const alertsToday = await Alert.countDocuments({ detectedAt: { $gte: startOfDay } });
 
         const latestReadings = await SpindleReading.aggregate([
+          // Bound the scan — never sweep the whole (large) readings table
           { $sort: { timestamp: -1 } },
+          { $limit: 2000 },
           { $group: { _id: { machineId: '$machineId', spindleId: '$spindleId' }, healthScore: { $first: '$healthScore' } } }
         ]);
         const avgHealthScore = latestReadings.length > 0

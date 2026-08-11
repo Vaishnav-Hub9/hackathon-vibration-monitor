@@ -8,6 +8,15 @@ SmartBearing is an end-to-end condition monitoring system for rotating machinery
 
 The full stack runs locally in minutes: a **React dashboard** (live charts + WebSockets), a **Node.js API** (Express + Socket.io + MongoDB), and a **Python ML server** (FastAPI + scikit-learn Gradient Boosting) — plus optional Azure OpenAI technician summaries.
 
+## 📚 Docs Index
+
+| File | What it's for |
+|---|---|
+| **[PROJECT_GUIDE.md](PROJECT_GUIDE.md)** | **The complete guide** — history, every part of the project, how analysis works, the physics, the ML, a full walkthrough, and a plain-English glossary. Start here. |
+| **[DEMO.md](DEMO.md)** | The 5-minute hackathon demo — exact click order + talking points. |
+| **[CONCEPTS.md](CONCEPTS.md)** | Deep physics & architecture narrative, written conceptually. |
+| **This file** | Problem-statement compliance matrix and architecture. |
+
 ---
 
 ## 📋 Problem Statement (PS 08)

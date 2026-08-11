@@ -9,6 +9,7 @@ import {
   Boxes,
   Workflow,
   Menu,
+  BrainCircuit,
   LogOut,
   LogIn,
   ChevronDown,
@@ -17,6 +18,7 @@ import {
 import { Button } from '@/components/ui/button';
 import NotificationBell from '@/components/layout/NotificationBell';
 import { getSocket } from '@/lib/socket';
+import { useActiveAlertsCount } from '@/hooks/useActiveAlertsCount';
 
 interface DashLayoutProps {
   children: ReactNode;
@@ -30,6 +32,7 @@ export default function DashLayout({ children }: DashLayoutProps) {
     () => localStorage.getItem('isLoggedIn') === 'true'
   );
   const [mlOnline, setMlOnline] = useState<boolean | null>(null);
+  const activeAlerts = useActiveAlertsCount();
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -95,8 +98,9 @@ export default function DashLayout({ children }: DashLayoutProps) {
     { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { href: '/machine/M003', icon: Activity, label: 'Machines' },
     { href: '/predictions', icon: BarChart3, label: 'Predictions' },
-    { href: '/alerts', icon: AlertTriangle, label: 'Alerts', badge: 3 },
+    { href: '/alerts', icon: AlertTriangle, label: 'Alerts', badge: activeAlerts },
     { href: '/analytics', icon: BarChart3, label: 'Analytics' },
+    { href: '/ml-analysis', icon: BrainCircuit, label: 'ML Analysis' },
     { href: '/twin', icon: Boxes, label: 'Digital Twin' },
     { href: '/workflow', icon: Workflow, label: 'Pipeline' },
     { href: '/settings', icon: SettingsIcon, label: 'Settings' },
@@ -135,9 +139,9 @@ export default function DashLayout({ children }: DashLayoutProps) {
                     <Icon className={`w-5 h-5 ${isActive ? 'text-amber' : ''}`} />
                     <span className="font-medium text-sm">{item.label}</span>
                   </div>
-                  {item.badge && (
-                    <span className="bg-[#EA580C] text-white text-xs font-bold px-2 py-0.5 rounded-full">
-                      {item.badge}
+                  {item.badge != null && item.badge > 0 && (
+                    <span className="bg-[#EA580C] text-white text-xs font-bold min-w-[20px] h-5 px-1.5 flex items-center justify-center rounded-full">
+                      {item.badge > 99 ? '99+' : item.badge}
                     </span>
                   )}
                 </div>

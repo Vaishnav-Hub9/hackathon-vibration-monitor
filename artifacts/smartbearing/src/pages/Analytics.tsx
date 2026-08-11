@@ -1,24 +1,56 @@
 import { useState, useEffect } from 'react';
 import DashLayout from '@/components/layout/DashLayout';
-import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
-import { FileDown, TrendingUp } from 'lucide-react';
+import {
+  AreaChart, Area, BarChart, Bar, ComposedChart, Line, XAxis, YAxis, Tooltip,
+  ResponsiveContainer, CartesianGrid, Legend, ReferenceArea
+} from 'recharts';
+import {
+  FileDown, TrendingUp, Gauge, Thermometer, Timer, ShieldAlert, Activity, Sigma
+} from 'lucide-react';
 import { motion } from 'framer-motion';
 import { machinesApi, analyticsApi } from '@/lib/api';
 import { generatePDFReport } from '@/utils/printReport';
+
+type BearingTrend = {
+  range: string;
+  days: number;
+  points: { date: string; t: number; vibration: number; temperature: number; health: number }[];
+  phases: { key: string; name: string; from: number; to: number; description: string }[];
+  stats: {
+    peakVibration: number; meanVibration: number; meanTemperature: number;
+    stdDeviation: number; kurtosis: number; peakToPeak: number; movingAverage30d: number;
+    rulDecayRate: number; degradationIndex: number;
+  } | null;
+  summary: string;
+};
+
+const PHASE_COLORS: Record<string, string> = {
+  baseline: '#10B981',
+  microcrack: '#F59E0B',
+  wear: '#EA580C',
+};
+
+const RANGES = [
+  { key: '1m', label: '1 Month' },
+  { key: '6m', label: '6 Months' },
+  { key: '1y', label: '1 Year' },
+];
 
 export default function Analytics() {
   const [calcInputs, setCalcInputs] = useState({ machines: 8, valPerHour: 1500, downtime: 4, incidents: 2 });
   const [exporting, setExporting] = useState(false);
   const [machineList, setMachineList] = useState<any[]>([]);
-  const [summary, setSummary] = useState<any>({
-    totalMachines: 0,
-    avgHealthScore: 0,
-    alertsToday: 0,
-  });
+  const [summary, setSummary] = useState<any>({ totalMachines: 0, avgHealthScore: 0, alertsToday: 0 });
   const [roiData, setRoiData] = useState<any>({ preventedFailures: 0, estimatedSavings: 0, downtimePrevented: 0 });
   const [heatmapData, setHeatmapData] = useState<any[]>([]);
   const [fleetChartData, setFleetChartData] = useState<any[]>([]);
   const [alertBarData, setAlertBarData] = useState<any[]>([]);
+
+  // ---- Bearing trend state (Feature: 1-year historical ball-bearing trend) ----
+  const [range, setRange] = useState<string>('1y');
+  const [machineId, setMachineId] = useState<string>('');
+  const [bearing, setBearing] = useState<BearingTrend | null>(null);
+  const [bearingLoading, setBearingLoading] = useState(true);
 
   useEffect(() => {
     let isMounted = true;
@@ -53,6 +85,17 @@ export default function Analytics() {
     return () => { isMounted = false; };
   }, []);
 
+  // Bearing trend — refetch when the time horizon or target machine changes
+  useEffect(() => {
+    let isMounted = true;
+    setBearingLoading(true);
+    analyticsApi.getBearingTrend(range, machineId)
+      .then((res) => { if (isMounted) setBearing(res.data.data); })
+      .catch((err) => { if (isMounted) console.error(err); })
+      .finally(() => { if (isMounted) setBearingLoading(false); });
+    return () => { isMounted = false; };
+  }, [range, machineId]);
+
   const saved = calcInputs.machines * calcInputs.valPerHour * calcInputs.downtime * calcInputs.incidents * 0.8;
 
   function handleExport() {
@@ -67,6 +110,18 @@ export default function Analytics() {
   const gradientIds = ['color1', 'color3', 'color4'];
   const gradientColors = ['#10B981', '#EA580C', '#3B82F6'];
   const machineNames = fleetChartData.length > 0 ? Object.keys(fleetChartData[0]).filter(k => k !== 'day') : [];
+
+  // Sparse x-axis date ticks for the trend chart (avoid label crowding)
+  const pts = bearing?.points || [];
+  const tickStep = Math.max(1, Math.floor(pts.length / 6));
+  const dateTicks = pts.filter((_, i) => i % tickStep === 0).map((p) => p.date);
+
+  const kpiCards = bearing?.stats ? [
+    { label: 'Peak Vibration Amplitude', val: `${bearing.stats.peakVibration} g`, icon: Gauge, color: '#EA580C', note: `vs ${bearing.stats.meanVibration} g mean` },
+    { label: 'Mean Temperature Trend', val: `${bearing.stats.meanTemperature}°C`, icon: Thermometer, color: '#3B82F6', note: 'bearing housing, fleet avg' },
+    { label: 'RUL Decay Rate', val: `${bearing.stats.rulDecayRate}%/mo`, icon: Timer, color: '#F59E0B', note: 'remaining useful life lost per month' },
+    { label: 'Degradation Index', val: `${bearing.stats.degradationIndex}/100`, icon: ShieldAlert, color: bearing.stats.degradationIndex > 60 ? '#EA580C' : bearing.stats.degradationIndex > 30 ? '#F59E0B' : '#10B981', note: bearing.stats.degradationIndex > 60 ? 'replacement window' : bearing.stats.degradationIndex > 30 ? 'early wear detected' : 'healthy band' },
+  ] : [];
 
   return (
     <DashLayout>
@@ -88,6 +143,157 @@ export default function Analytics() {
             {exporting ? 'Preparing…' : 'Export PDF Report'}
           </motion.button>
         </div>
+
+        {/* ══════════════ Bearing 1-year degradation trend (new) ══════════════ */}
+        <div className="bg-navy-card border border-navy rounded-xl p-5 sm:p-6">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
+            <div>
+              <h2 className="font-display text-lg font-bold text-white">Ball Bearing Degradation Trend</h2>
+              <p className="text-xs text-slate-500 mt-1">
+                Historical vibration vs. housing temperature, with degradation phases. Anchored on live stored readings.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Time horizon selector */}
+              <div className="flex items-center bg-[#0A0E1A] border border-navy rounded-lg p-1">
+                {RANGES.map((r) => (
+                  <button
+                    key={r.key}
+                    onClick={() => setRange(r.key)}
+                    className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                      range === r.key ? 'bg-gradient-to-r from-amber to-[#EA580C] text-[#0A0E1A]' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    {r.label}
+                  </button>
+                ))}
+              </div>
+              {/* Machine selector */}
+              <select
+                value={machineId}
+                onChange={(e) => setMachineId(e.target.value)}
+                className="bg-[#0A0E1A] border border-navy rounded-lg px-3 py-2 text-xs font-medium text-slate-200 focus:outline-none focus:border-amber/50"
+              >
+                <option value="">All Fleet (avg)</option>
+                {machineList.map((m) => (
+                  <option key={m.id} value={m.id}>{m.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Phase legend */}
+          <div className="flex flex-wrap items-center gap-4 mb-4">
+            {(bearing?.phases || []).map((ph) => (
+              <span key={ph.key} className="flex items-center gap-1.5 text-[11px] text-slate-400">
+                <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: PHASE_COLORS[ph.key] }} />
+                {ph.name}
+              </span>
+            ))}
+          </div>
+
+          {/* KPI cards */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            {kpiCards.map((k, i) => (
+              <motion.div
+                key={k.label}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.05 }}
+                className="bg-[#0A0E1A]/60 border border-navy rounded-lg p-4"
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <k.icon className="w-4 h-4" style={{ color: k.color }} />
+                  <span className="text-[11px] text-slate-400">{k.label}</span>
+                </div>
+                <div className="font-mono-data text-2xl font-bold" style={{ color: k.color }}>{k.val}</div>
+                <div className="text-[10px] text-slate-500 mt-1">{k.note}</div>
+              </motion.div>
+            ))}
+          </div>
+
+          {/* Dual-axis trend chart with degradation phase bands */}
+          <div className="h-72 sm:h-80">
+            {bearingLoading ? (
+              <div className="h-full flex items-center justify-center text-sm text-slate-500">Computing degradation trend…</div>
+            ) : pts.length === 0 ? (
+              <div className="h-full flex items-center justify-center text-sm text-slate-500">{bearing?.summary || 'No data yet.'}</div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={pts} margin={{ top: 10, right: 0, left: -18, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1E2D4A" vertical={false} />
+                  <XAxis dataKey="date" ticks={dateTicks} stroke="#64748B" fontSize={10} tickLine={false} />
+                  <YAxis yAxisId="vib" stroke="#EA580C" fontSize={10} tickLine={false} unit=" g" />
+                  <YAxis yAxisId="temp" orientation="right" stroke="#3B82F6" fontSize={10} tickLine={false} unit="°C" />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#0F1629', borderColor: '#1E2D4A', borderRadius: '8px' }}
+                    itemStyle={{ fontFamily: 'JetBrains Mono', fontSize: '12px' }}
+                    formatter={(value: any, name: string) => [value, name]}
+                    labelFormatter={(label) => `Date: ${label}`}
+                  />
+                  <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
+                  {(bearing?.phases || []).map((ph) => (
+                    <ReferenceArea
+                      key={ph.key}
+                      yAxisId="vib"
+                      x1={ph.from}
+                      x2={ph.to}
+                      fill={PHASE_COLORS[ph.key]}
+                      fillOpacity={0.08}
+                      stroke={PHASE_COLORS[ph.key]}
+                      strokeOpacity={0.25}
+                      strokeDasharray="4 4"
+                    />
+                  ))}
+                  <Line yAxisId="vib" type="monotone" dataKey="vibration" name="Vibration (g)" stroke="#EA580C" strokeWidth={2.5} dot={false} activeDot={{ r: 3 }} />
+                  <Line yAxisId="temp" type="monotone" dataKey="temperature" name="Temperature (°C)" stroke="#3B82F6" strokeWidth={2} dot={false} activeDot={{ r: 3 }} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </div>
+
+        {/* Statistical summary & insight panel */}
+        {bearing?.stats && (
+          <div className="grid lg:grid-cols-3 gap-6">
+            <div className="bg-navy-card border border-navy rounded-xl p-5 lg:col-span-1">
+              <h3 className="text-sm font-medium text-slate-300 mb-4">Statistical Summary <span className="text-slate-500 font-mono-data text-xs ml-1">(past {bearing.days} days)</span></h3>
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { label: 'Moving Avg (30d)', val: `${bearing.stats.movingAverage30d} g`, icon: Activity },
+                  { label: 'Std Deviation', val: `±${bearing.stats.stdDeviation} g`, icon: Sigma },
+                  { label: 'Kurtosis', val: `${bearing.stats.kurtosis}`, icon: Sigma, hint: bearing.stats.kurtosis > 3 ? 'heavy-tailed · impacts' : 'near-Gaussian' },
+                  { label: 'Peak-to-Peak', val: `${bearing.stats.peakToPeak} g`, icon: Gauge },
+                ].map((s, i) => (
+                  <div key={s.label} className="bg-[#0A0E1A]/60 border border-navy rounded-lg p-3">
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <s.icon className="w-3.5 h-3.5 text-slate-500" />
+                      <span className="text-[10px] text-slate-500">{s.label}</span>
+                    </div>
+                    <div className="font-mono-data text-lg font-bold text-white">{s.val}</div>
+                    {s.hint && <div className="text-[10px] text-slate-500 mt-0.5">{s.hint}</div>}
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="bg-gradient-to-br from-[#0F1629] to-[#141E35] border border-amber/20 rounded-xl p-5 lg:col-span-2">
+              <div className="flex items-center gap-2 mb-3">
+                <TrendingUp className="w-4 h-4 text-amber" />
+                <h3 className="text-sm font-medium text-slate-200">Auto-Generated Wear Summary</h3>
+              </div>
+              <p className="text-sm text-slate-300 leading-relaxed">{bearing.summary}</p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {(bearing.phases || []).map((ph) => (
+                  <div key={ph.key} className="text-[11px] text-slate-400 border border-navy rounded-lg px-3 py-2 flex-1 min-w-[200px]">
+                    <span className="font-bold" style={{ color: PHASE_COLORS[ph.key] }}>{ph.name}</span>
+                    <span className="text-slate-600 mx-1">·</span>
+                    {ph.description}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* 6 KPIs */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">

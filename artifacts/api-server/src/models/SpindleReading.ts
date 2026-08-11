@@ -50,4 +50,8 @@ const SpindleReadingSchema: Schema = new Schema({
   source: { type: String, enum: ['simulator', 'edge'], default: 'simulator' }
 });
 
+// Compound index so per-machine "latest reading" queries (machine history,
+// spindle lists, fleet summary) stay index-backed as the collection grows.
+SpindleReadingSchema.index({ machineId: 1, timestamp: -1 });
+
 export const SpindleReading = mongoose.model<ISpindleReading>('SpindleReading', SpindleReadingSchema);

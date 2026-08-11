@@ -45,12 +45,18 @@ export const analyticsApi = {
   getTrends: () => api.get('/analytics/trends'),
   getROI: () => api.get('/analytics/roi'),
   getHeatmap: () => api.get('/analytics/heatmap'),
-  getMonthly: () => api.get('/analytics/monthly')
+  getMonthly: () => api.get('/analytics/monthly'),
+  getBearingTrend: (range = '1y', machineId = '') =>
+    api.get('/analytics/bearing-trend', { params: { range, ...(machineId ? { machineId } : {}) } })
 };
 
 export const maintenanceApi = {
   getAll: () => api.get('/maintenance'),
   create: (data: any) => api.post('/maintenance', data)
+};
+
+export const mlApi = {
+  getAnalysis: () => api.get('/ml/analysis')
 };
 
 export const simulatorApi = {

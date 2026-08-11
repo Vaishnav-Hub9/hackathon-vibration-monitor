@@ -81,6 +81,7 @@ router.get('/:id/spindles', async (req: Request, res: Response): Promise<void> =
     const spindles = await SpindleReading.aggregate([
       { $match: { machineId: req.params.id } },
       { $sort: { timestamp: -1 } },
+      { $limit: 2000 },
       { $group: {
           _id: "$spindleId",
           latestReading: { $first: "$$ROOT" }
