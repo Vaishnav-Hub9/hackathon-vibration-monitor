@@ -56,9 +56,24 @@ export default function Predictions() {
   const warningMachine = machines.find(m => m.status === 'warning');
 
   // Build combined RUL chart data
-  const rul1 = Object.values(rulData)[0] || [];
-  const rul2 = Object.values(rulData)[1] || [];
   const machineIds = Object.keys(rulData);
+
+  // Merge every degrading machine's series into one chart-level dataset (the
+  // pattern every other chart in the app uses): historical values on _hist
+  // keys, projected values on _proj keys. Recharts draws each Line through
+  // its non-null points, so the solid historical segment and the dashed
+  // projection join at the shared boundary day.
+  const allRul = Object.values(rulData);
+  const chartData = Array.from({ length: 30 }, (_, day) => {
+    const row: Record<string, any> = { day };
+    machineIds.forEach((id, i) => {
+      const series = allRul[i];
+      if (!series || !series[day]) return;
+      row[`${id}_hist`] = day < 16 ? series[day].healthScore : null;
+      row[`${id}_proj`] = day >= 15 ? series[day].healthScore : null;
+    });
+    return row;
+  });
 
   return (
     <DashLayout>
@@ -113,30 +128,22 @@ export default function Predictions() {
           <h2 className="font-bold text-white mb-6">Remaining Useful Life (RUL) Trajectories</h2>
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+              <LineChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1E2D4A" vertical={false} />
-                <XAxis dataKey="day" type="number" domain={[0, 29]} stroke="#64748B" tickFormatter={(val) => `Day ${val}`} />
+                <XAxis dataKey="day" stroke="#64748B" tickFormatter={(val) => `Day ${val}`} />
                 <YAxis domain={[0, 100]} stroke="#64748B" tickFormatter={(val) => `${val}%`} />
                 <Tooltip contentStyle={{ backgroundColor: '#0F1629', borderColor: '#1E2D4A' }} />
                 <Legend />
                 <ReferenceLine y={20} stroke="#EA580C" strokeWidth={2} label={{ value: "Failure Threshold", position: 'top', fill: '#EA580C', fontSize: 12 }} />
 
-                {rul1.length > 0 && (
-                  <>
-                    <Line data={rul1.slice(0, 16)} type="monotone" dataKey="healthScore"
-                      name={`${machineIds[0]} (Historical)`} stroke="#EA580C" strokeWidth={3} dot={false} />
-                    <Line data={rul1.slice(15)} type="monotone" dataKey="healthScore"
-                      name={`${machineIds[0]} (Projected)`} stroke="#EA580C" strokeWidth={3} strokeDasharray="5 5" dot={false} />
-                  </>
-                )}
-                {rul2.length > 0 && (
-                  <>
-                    <Line data={rul2.slice(0, 16)} type="monotone" dataKey="healthScore"
-                      name={`${machineIds[1]} (Historical)`} stroke="#F59E0B" strokeWidth={2} dot={false} />
-                    <Line data={rul2.slice(15)} type="monotone" dataKey="healthScore"
-                      name={`${machineIds[1]} (Projected)`} stroke="#F59E0B" strokeWidth={2} strokeDasharray="5 5" dot={false} />
-                  </>
-                )}
+                {['hist', 'proj'].flatMap((seg) => machineIds.map((id, i) => (
+                  <Line key={`${id}-${seg}`} type="monotone" dataKey={`${id}_${seg}`} connectNulls
+                    name={`${id} ${seg === 'hist' ? '(Historical)' : '(Projected)'}`}
+                    stroke={i === 0 ? '#EA580C' : '#F59E0B'}
+                    strokeWidth={i === 0 ? 3 : 2}
+                    strokeDasharray={seg === 'proj' ? '5 5' : undefined}
+                    dot={false} />
+                )))}
               </LineChart>
             </ResponsiveContainer>
           </div>

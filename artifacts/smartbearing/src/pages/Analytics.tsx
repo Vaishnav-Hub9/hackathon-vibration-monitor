@@ -10,6 +10,8 @@ import {
 import { motion } from 'framer-motion';
 import { machinesApi, analyticsApi } from '@/lib/api';
 import { generatePDFReport } from '@/utils/printReport';
+import { getSocket } from '@/lib/socket';
+import LiveReadingsChart from '@/components/dashboard/LiveReadingsChart';
 
 type BearingTrend = {
   range: string;
@@ -95,6 +97,71 @@ export default function Analytics() {
       .finally(() => { if (isMounted) setBearingLoading(false); });
     return () => { isMounted = false; };
   }, [range, machineId]);
+
+  // Live WebSocket: as each reading arrives, patch today's fleet-health point
+  // and (on new alerts) bump today's heatmap cell + current month's bars so
+  // the analytics graphs visibly react to real-time events.
+  useEffect(() => {
+    const socket = getSocket();
+    const subscribeTo = ['M001', 'M002', 'M003', 'M004', 'M005', 'M006'];
+    subscribeTo.forEach((id) => socket.emit('subscribe:machine', { machineId: id }));
+
+    let liveHealthSum = 0;
+    let liveHealthCount = 0;
+    let lastPatchSec = 0;
+
+    const onSensorUpdate = (data: any) => {
+      if (typeof data.healthScore !== 'number') return;
+      liveHealthSum += data.healthScore;
+      liveHealthCount += 1;
+      // Patch at most once per second to avoid re-render churn at 3.5s cadence.
+      const nowSec = Math.floor(Date.now() / 1000);
+      if (nowSec === lastPatchSec || liveHealthCount === 0) return;
+      lastPatchSec = nowSec;
+      const avgHealth = Math.round(liveHealthSum / liveHealthCount);
+      liveHealthSum = 0;
+      liveHealthCount = 0;
+      setFleetChartData((prev) => {
+        if (prev.length === 0) return prev;
+        const next = [...prev];
+        const last = { ...next[next.length - 1] };
+        last['Fleet Average'] = avgHealth;
+        next[next.length - 1] = last;
+        return next;
+      });
+    };
+
+    const onNewAlert = (alert: any) => {
+      // Today = last heatmap cell
+      setHeatmapData((prev) => {
+        if (prev.length === 0) return prev;
+        const next = [...prev];
+        const last = { ...next[next.length - 1] };
+        last.intensity = Math.min(4, (last.intensity ?? 0) + 1);
+        next[next.length - 1] = last;
+        return next;
+      });
+      // Current month = last monthly bar
+      setAlertBarData((prev) => {
+        if (prev.length === 0) return prev;
+        const next = [...prev];
+        const last = { ...next[next.length - 1] };
+        const type = String(alert.type || '').toUpperCase();
+        if (type === 'CRITICAL') last.Critical = (last.Critical ?? 0) + 1;
+        else if (type === 'WARNING') last.Warning = (last.Warning ?? 0) + 1;
+        next[next.length - 1] = last;
+        return next;
+      });
+    };
+
+    socket.on('sensor:update', onSensorUpdate);
+    socket.on('alert:new', onNewAlert);
+    return () => {
+      subscribeTo.forEach((id) => socket.emit('unsubscribe:machine', { machineId: id }));
+      socket.off('sensor:update', onSensorUpdate);
+      socket.off('alert:new', onNewAlert);
+    };
+  }, []);
 
   const saved = calcInputs.machines * calcInputs.valPerHour * calcInputs.downtime * calcInputs.incidents * 0.8;
 
@@ -251,6 +318,11 @@ export default function Analytics() {
               </ResponsiveContainer>
             )}
           </div>
+        </div>
+
+        {/* Live streaming readings — the WebSocket feed, live on this page */}
+        <div className="bg-navy-card border border-navy p-5 rounded-xl">
+          <LiveReadingsChart height={220} />
         </div>
 
         {/* Statistical summary & insight panel */}

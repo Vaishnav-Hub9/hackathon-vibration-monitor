@@ -9,6 +9,7 @@ import { Download, CheckCircle2, Bell, Clock, ChevronDown, ChevronUp, FileSearch
 import { motion, AnimatePresence } from 'framer-motion';
 import { alertsApi, analyticsApi } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
+import LiveReadingsChart from '@/components/dashboard/LiveReadingsChart';
 
 type AlertStatus = 'active' | 'acknowledged' | 'resolved';
 
@@ -58,6 +59,7 @@ export default function Alerts() {
         // Real 30-day alert timeline aggregated from the database
         const timeline = (trendsRes.data.data || []).map((d: any) => ({
           day: d.day,
+          alerts: d.alerts ?? 0,
           critical: d.critical ?? 0,
           warning: d.warning ?? 0,
           info: Math.max(0, d.alerts - (d.critical ?? 0) - (d.warning ?? 0)),
@@ -72,6 +74,22 @@ export default function Alerts() {
     const socket = getSocket();
     const handleNewAlert = (alert: Alert) => {
        setAlertList(prev => [alert, ...prev]);
+
+       // Live: bump today's bar in the Alert Frequency chart so the graph
+       // visibly reacts as new alerts arrive over WebSocket.
+       setTimelineData(prev => {
+         if (prev.length === 0) return prev;
+         const next = [...prev];
+         const last = { ...next[next.length - 1] };
+         const type = String(alert.type || '').toUpperCase();
+         if (type === 'CRITICAL') last.critical = (last.critical ?? 0) + 1;
+         else if (type === 'WARNING') last.warning = (last.warning ?? 0) + 1;
+         else last.info = (last.info ?? 0) + 1;
+         last.alerts = (last.alerts ?? 0) + 1;
+         next[next.length - 1] = last;
+         return next;
+       });
+
        if (alert.type === 'CRITICAL') {
            showToast(`CRITICAL: ${alert.machineName || alert.machineId} - ${alert.message}`);
        }
@@ -153,6 +171,10 @@ export default function Alerts() {
               <div className={`text-2xl font-mono-data font-bold ${s.color || 'text-white'}`}>{s.val}</div>
             </div>
           ))}
+        </div>
+
+        <div className="bg-navy-card border border-navy p-5 rounded-xl">
+          <LiveReadingsChart height={180} />
         </div>
 
         <div className="bg-navy-card border border-navy p-5 rounded-xl h-48">
