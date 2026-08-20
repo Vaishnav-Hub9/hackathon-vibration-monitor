@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { machines } from '@/data/mockData';
 import {
   LayoutDashboard, Activity, Bell, BarChart2, Settings,
-  Cpu, ChevronRight, Search, Zap, TrendingDown, BrainCircuit
+  Cpu, ChevronRight, Search, Zap, TrendingDown, BrainCircuit, CircuitBoard
 } from 'lucide-react';
 
 const NAV_ITEMS = [
@@ -14,6 +14,7 @@ const NAV_ITEMS = [
   { label: 'Alert Center', href: '/alerts', icon: Bell, shortcut: 'A' },
   { label: 'Analytics & ROI', href: '/analytics', icon: BarChart2, shortcut: 'R' },
   { label: 'ML Training Analysis', href: '/ml-analysis', icon: BrainCircuit, shortcut: 'M' },
+  { label: 'Hardware Lab', href: '/hardware', icon: CircuitBoard, shortcut: 'H' },
   { label: 'Settings', href: '/settings', icon: Settings, shortcut: 'S' },
 ];
 

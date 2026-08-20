@@ -10,6 +10,7 @@ import {
   Workflow,
   Menu,
   BrainCircuit,
+  CircuitBoard,
   LogOut,
   LogIn,
   ChevronDown,
@@ -103,6 +104,7 @@ export default function DashLayout({ children }: DashLayoutProps) {
     { href: '/ml-analysis', icon: BrainCircuit, label: 'ML Analysis' },
     { href: '/twin', icon: Boxes, label: 'Digital Twin' },
     { href: '/workflow', icon: Workflow, label: 'Pipeline' },
+    { href: '/hardware', icon: CircuitBoard, label: 'Hardware Lab' },
     { href: '/settings', icon: SettingsIcon, label: 'Settings' },
   ];
 

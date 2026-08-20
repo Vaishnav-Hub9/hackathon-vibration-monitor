@@ -6,6 +6,7 @@ import app from "./app.js";
 import { logger } from "./lib/logger.js";
 import { setIo } from './socket.js';
 import { sensorSimulator } from './simulator/SensorSimulator.js';
+import { hardwareSimulator } from './simulator/HardwareSimulator.js';
 
 dotenv.config();
 
@@ -71,6 +72,11 @@ connectDB().then(() => {
     
     if (process.env.SIMULATOR_AUTO_START === 'true') {
       sensorSimulator.start();
+    }
+    // Arduino rig demo stream (disable with HARDWARE_SIMULATOR=false when a
+    // physical rig is feeding /api/hardware/ingest).
+    if (process.env.HARDWARE_SIMULATOR !== 'false') {
+      hardwareSimulator.start();
     }
   });
 });

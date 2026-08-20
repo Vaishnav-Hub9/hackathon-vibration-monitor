@@ -61,6 +61,10 @@ export const mlApi = {
   getAnalysis: () => api.get('/ml/analysis')
 };
 
+export const hardwareApi = {
+  getStream: () => api.get('/hardware/stream')
+};
+
 export const simulatorApi = {
   start: () => api.post('/simulator/start'),
   stop: () => api.post('/simulator/stop'),
