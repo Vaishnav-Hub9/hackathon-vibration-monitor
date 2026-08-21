@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useEffect, useState, useRef } from 'react';
+import { motion, AnimatePresence, useScroll, useSpring, useTransform } from 'framer-motion';
 import { Link } from 'wouter';
 import {
   Activity, ArrowRight, CheckCircle2, ShieldAlert, Cpu, Zap, MessageCircle,
@@ -8,6 +8,29 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import BearingModel from '@/components/landing/BearingModel';
+import AmbientCanvas from '@/components/ui/AmbientCanvas';
+import WaveField from '@/components/ui/WaveField';
+import { Magnetic, TiltCard, CountUp } from '@/components/ui/fx';
+
+/* ─── Spotlight card — border + inner glow track the cursor ─── */
+function SpotlightCard({ children, className }: { children: React.ReactNode; className?: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  return (
+    <div
+      ref={ref}
+      onMouseMove={(e) => {
+        const el = ref.current;
+        if (!el) return;
+        const r = el.getBoundingClientRect();
+        el.style.setProperty('--sx', `${e.clientX - r.left}px`);
+        el.style.setProperty('--sy', `${e.clientY - r.top}px`);
+      }}
+      className={`spotlight-card ${className ?? ''}`}
+    >
+      {children}
+    </div>
+  );
+}
 
 const NAV_LINKS = [
   { label: 'About', href: '#problem' },
@@ -85,6 +108,13 @@ export default function Landing() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  // Cinematic parallax — hero layers drift at different rates on scroll
+  const { scrollYProgress } = useScroll();
+  const progressScale = useSpring(scrollYProgress, { stiffness: 130, damping: 28, restDelta: 0.001 });
+  const heroY = useTransform(scrollYProgress, [0, 0.12], [0, 120]);
+  const heroOpacity = useTransform(scrollYProgress, [0, 0.1], [1, 0]);
+  const modelY = useTransform(scrollYProgress, [0, 0.12], [0, -80]);
+
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20);
     window.addEventListener('scroll', onScroll, { passive: true });
@@ -135,22 +165,60 @@ export default function Landing() {
         </AnimatePresence>
       </nav>
 
+      {/* Scroll progress bar */}
+      <motion.div
+        className="fixed top-0 left-0 right-0 h-[2px] origin-left z-[60] bg-gradient-to-r from-blue-400 via-indigo-400 to-blue-400 shadow-[0_0_10px_rgba(96,165,250,0.5)]"
+        style={{ scaleX: progressScale }}
+      />
+
       {/* ═══════════════ HERO ═══════════════ */}
       <section className="relative min-h-[100dvh] pt-16 flex items-center overflow-hidden">
+        {/* Cinematic living-light layer + light shaft + rotating halo */}
+        <AmbientCanvas particles={70} />
         <div className="absolute inset-0 grid-bg opacity-40" />
+        <div className="light-shaft" />
+        <div className="halo-ring w-[760px] h-[760px] top-1/2 left-[72%] -translate-x-1/2 -translate-y-1/2 hidden lg:block opacity-60" />
+        {/* Small, subtle vibration waves hugging the hero floor */}
+        <div className="absolute inset-x-0 bottom-0 h-20 pointer-events-none">
+          <WaveField layers={2} opacity={0.4} />
+        </div>
 
         <div className="relative z-10 max-w-6xl mx-auto px-6 grid lg:grid-cols-2 gap-12 items-center w-full py-20">
-          <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }} className="space-y-8">
+          <motion.div style={{ y: heroY, opacity: heroOpacity }} initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }} className="space-y-8">
             <div className="inline-flex items-center gap-2 border border-white/10 bg-white/[0.03] px-3.5 py-1.5 rounded-full">
               <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
               <span className="text-blue-400 text-xs font-semibold tracking-widest uppercase">Predictive Maintenance</span>
             </div>
 
             <h1 className="text-5xl sm:text-6xl md:text-7xl font-bold leading-[1.05] tracking-tight">
-              We help factories{' '}
-              <RotatingText />
+              {['We', 'help', 'factories'].map((w, i) => (
+                <motion.span
+                  key={w}
+                  initial={{ opacity: 0, y: 28, filter: 'blur(8px)' }}
+                  animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+                  transition={{ delay: 0.15 + i * 0.09, duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+                  className="inline-block mr-[0.28em]"
+                >
+                  {w}
+                </motion.span>
+              ))}
+              <motion.span
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.45, duration: 0.4 }}
+                className="inline-block"
+              >
+                <RotatingText />
+              </motion.span>
               <br />
-              bearing failures.
+              <motion.span
+                initial={{ opacity: 0, y: 28, filter: 'blur(8px)' }}
+                animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+                transition={{ delay: 0.55, duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+                className="inline-block"
+              >
+                bearing failures.
+              </motion.span>
             </h1>
 
             <p className="text-lg text-white/40 max-w-xl leading-relaxed">
@@ -160,9 +228,11 @@ export default function Landing() {
 
             <div className="flex flex-wrap items-center gap-4">
               <Link href="/register">
-                <Button className="shimmer glow-pulse bg-white hover:bg-white/90 text-black font-semibold h-12 px-8 text-base rounded-xl border-none">
-                  Get Started <ArrowRight className="w-4 h-4 ml-2" />
-                </Button>
+                <Magnetic>
+                  <Button className="shimmer glow-pulse bg-white hover:bg-white/90 text-black font-semibold h-12 px-8 text-base rounded-xl border-none">
+                    Get Started <ArrowRight className="w-4 h-4 ml-2" />
+                  </Button>
+                </Magnetic>
               </Link>
               <Button variant="outline" onClick={() => scrollToId('how')} className="border-white/10 text-white/60 hover:text-white hover:bg-white/5 h-12 px-8 text-base rounded-xl bg-transparent">
                 See How It Works
@@ -177,11 +247,38 @@ export default function Landing() {
             </div>
           </motion.div>
 
-          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.8, delay: 0.2 }} className="relative hidden lg:block">
+          <motion.div style={{ y: modelY }} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.8, delay: 0.2 }} className="relative hidden lg:block">
             <BearingModel />
           </motion.div>
         </div>
+
+        {/* Scroll cue */}
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-2 pointer-events-none">
+          <span className="text-[10px] font-mono uppercase tracking-[0.25em] text-white/25">Scroll</span>
+          <div className="w-5 h-9 rounded-full border border-white/20 flex items-start justify-center p-1">
+            <motion.div
+              animate={{ y: [0, 14, 0], opacity: [1, 0.2, 1] }}
+              transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
+              className="w-1 h-2 rounded-full bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.8)]"
+            />
+          </div>
+        </div>
       </section>
+
+      {/* ═══════════════ LIVE TICKER ═══════════════ */}
+      <div aria-hidden="true" className="relative border-y border-white/[0.05] bg-white/[0.015] backdrop-blur-sm overflow-hidden py-3 select-none">
+        <div className="flex w-max animate-[marquee_36s_linear_infinite] whitespace-nowrap">
+          {[...Array(2)].flatMap((_, rep) =>
+            ['BPFO/BPFI defect-frequency detection', '14,400 RPM ring frames', '6 fault classes · real ML model', 'Offline-first edge intelligence', 'WhatsApp alerts in plain language', '<2ms fault detection', 'Dual-modal vib + acoustic sensing', '400 spindles protected per machine'].map((text, i) => (
+              <div key={`${rep}-${i}`} className="flex items-center gap-2.5 px-7 text-[11px] font-mono uppercase tracking-widest text-white/30">
+                <span className="w-1 h-1 rounded-full bg-blue-400/70" />
+                {text}
+                <span className="text-white/10 ml-5">✦</span>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
 
       {/* ═══════════════ ABOUT ═══════════════ */}
       <section id="problem" className="py-28 border-t border-white/[0.04] scroll-mt-16">
@@ -210,18 +307,22 @@ export default function Landing() {
 
             <motion.div initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.6, delay: 0.15 }} className="grid grid-cols-2 gap-4">
               {[
-                { label: 'Avg. Downtime', value: '6 hrs', icon: Clock, color: 'text-blue-400' },
-                { label: 'Cost / Incident', value: '₹54K+', icon: ShieldAlert, color: 'text-red-400' },
-                { label: 'Detection Speed', value: '<2ms', icon: Zap, color: 'text-emerald-400' },
-                { label: 'Spindles Protected', value: '50K+', icon: Activity, color: 'text-purple-400' },
+                { label: 'Avg. Downtime', value: 6, suffix: ' hrs', icon: Clock, color: 'text-blue-400' },
+                { label: 'Cost / Incident', value: 54, prefix: '₹', suffix: 'K+', icon: ShieldAlert, color: 'text-red-400' },
+                { label: 'Detection Speed', value: null, display: '<2ms', icon: Zap, color: 'text-emerald-400' },
+                { label: 'Spindles Protected', value: 50, suffix: 'K+', icon: Activity, color: 'text-purple-400' },
               ].map((stat, i) => (
-                <motion.div key={i} initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.08 }}
-                  className="deck-card deck-card-stacked rounded-xl p-6"
-                >
-                  <stat.icon className={`w-5 h-5 ${stat.color} mb-3`} />
-                  <div className="font-serif-display italic text-2xl font-bold mb-1">{stat.value}</div>
-                  <div className="text-sm text-white/35">{stat.label}</div>
-                </motion.div>
+                <TiltCard key={i}>
+                  <motion.div initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.08 }}
+                    className="deck-card deck-card-stacked rounded-xl p-6 h-full"
+                  >
+                    <stat.icon className={`w-5 h-5 ${stat.color} mb-3`} />
+                    <div className="font-serif-display italic text-2xl font-bold mb-1">
+                      {'display' in stat && stat.display ? stat.display : <CountUp to={stat.value as number} prefix={(stat as any).prefix ?? ''} suffix={(stat as any).suffix ?? ''} />}
+                    </div>
+                    <div className="text-sm text-white/35">{stat.label}</div>
+                  </motion.div>
+                </TiltCard>
               ))}
             </motion.div>
           </div>
@@ -245,18 +346,20 @@ export default function Landing() {
               { step: '03', title: 'Predict', desc: 'Lightweight ML models detect BPFO/BPFI spikes before failure.', icon: Cpu, color: 'text-purple-400' },
               { step: '04', title: 'Alert', desc: 'Instant WhatsApp and dashboard alerts with estimated time-to-failure.', icon: MessageCircle, color: 'text-amber-400' },
             ].map((item, i) => (
-              <motion.div key={i} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.1, duration: 0.5 }}
-                className="deck-card deck-card-stacked rounded-xl p-6 group"
-              >
-                <div className="flex items-center justify-between mb-5">
-                  <div className="w-10 h-10 rounded-lg bg-white/[0.05] flex items-center justify-center group-hover:bg-white/[0.08] transition-colors">
-                    <item.icon className={`w-5 h-5 ${item.color}`} />
+              <SpotlightCard key={i} className="h-full">
+                <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.1, duration: 0.5 }}
+                  className="deck-card deck-card-stacked rounded-xl p-6 group h-full hover:-translate-y-1 transition-transform duration-300"
+                >
+                  <div className="flex items-center justify-between mb-5">
+                    <div className="w-10 h-10 rounded-lg bg-white/[0.05] flex items-center justify-center group-hover:bg-white/[0.08] transition-colors">
+                      <item.icon className={`w-5 h-5 ${item.color}`} />
+                    </div>
+                    <div className="text-white/10 font-mono font-bold text-2xl">{item.step}</div>
                   </div>
-                  <div className="text-white/10 font-mono font-bold text-2xl">{item.step}</div>
-                </div>
-                <h3 className="font-semibold text-lg mb-2">{item.title}</h3>
-                <p className="text-white/35 text-sm leading-relaxed">{item.desc}</p>
-              </motion.div>
+                  <h3 className="font-semibold text-lg mb-2">{item.title}</h3>
+                  <p className="text-white/35 text-sm leading-relaxed">{item.desc}</p>
+                </motion.div>
+              </SpotlightCard>
             ))}
           </div>
         </div>
@@ -281,18 +384,20 @@ export default function Landing() {
               { icon: Thermometer, title: 'Dual-Modal Sensing', desc: 'Vibration + acoustics fused for fewer false alarms.', status: 'online' as const },
               { icon: Wifi, title: 'Offline-First', desc: 'Survives power cuts and network failures; alerts queue locally.', status: 'online' as const },
             ].map((f, i) => (
-              <motion.div key={i} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: (i % 3) * 0.08, duration: 0.5 }}
-                className="deck-card deck-card-stacked p-7 rounded-xl group"
-              >
-                <div className="flex items-center justify-between mb-5">
-                  <div className="w-10 h-10 rounded-lg bg-white/[0.05] flex items-center justify-center group-hover:bg-white/[0.08] transition-colors">
-                    <f.icon className="w-5 h-5 text-blue-400" />
+              <SpotlightCard key={i} className="h-full">
+                <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: (i % 3) * 0.08, duration: 0.5 }}
+                  className="deck-card deck-card-stacked p-7 rounded-xl group h-full hover:-translate-y-1 transition-transform duration-300"
+                >
+                  <div className="flex items-center justify-between mb-5">
+                    <div className="w-10 h-10 rounded-lg bg-white/[0.05] flex items-center justify-center group-hover:bg-white/[0.08] transition-colors">
+                      <f.icon className="w-5 h-5 text-blue-400" />
+                    </div>
+                    <StatusDot status={f.status} />
                   </div>
-                  <StatusDot status={f.status} />
-                </div>
-                <h3 className="font-semibold text-lg mb-2">{f.title}</h3>
-                <p className="text-white/35 text-sm leading-relaxed">{f.desc}</p>
-              </motion.div>
+                  <h3 className="font-semibold text-lg mb-2">{f.title}</h3>
+                  <p className="text-white/35 text-sm leading-relaxed">{f.desc}</p>
+                </motion.div>
+              </SpotlightCard>
             ))}
           </div>
         </div>
@@ -384,9 +489,11 @@ export default function Landing() {
             </p>
             <div className="flex flex-wrap justify-center gap-4">
               <Link href="/register">
-                <Button className="bg-white hover:bg-white/90 text-black font-semibold h-12 px-9 text-base rounded-xl border-none">
-                  Get Started Free <ArrowRight className="w-4 h-4 ml-2" />
-                </Button>
+                <Magnetic>
+                  <Button className="bg-white hover:bg-white/90 text-black font-semibold h-12 px-9 text-base rounded-xl border-none">
+                    Get Started Free <ArrowRight className="w-4 h-4 ml-2" />
+                  </Button>
+                </Magnetic>
               </Link>
               <Link href="/login">
                 <Button variant="outline" className="border-white/10 text-white/60 hover:text-white hover:bg-white/5 h-12 px-9 text-base rounded-xl bg-transparent">
@@ -399,6 +506,9 @@ export default function Landing() {
       </section>
 
       {/* ═══════════════ FOOTER ═══════════════ */}
+      <div className="relative h-16 pointer-events-none" aria-hidden="true">
+        <WaveField layers={2} opacity={0.3} />
+      </div>
       <footer className="border-t border-white/[0.06] py-12">
         <div className="max-w-6xl mx-auto px-6">
           <div className="grid md:grid-cols-4 gap-8 mb-12">

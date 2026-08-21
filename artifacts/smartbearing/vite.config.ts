@@ -50,6 +50,12 @@ export default defineConfig({
     strictPort: true,
     host: "0.0.0.0",
     allowedHosts: true,
+    // Dev-only proxy so the browser talks to the API/socket servers same-origin
+    // (the preview only exposes this port). No HMR settings are touched.
+    proxy: {
+      "/api": { target: "http://127.0.0.1:5000", changeOrigin: true },
+      "/socket.io": { target: "http://127.0.0.1:5000", ws: true, changeOrigin: true },
+    },
     fs: {
       strict: true,
     },

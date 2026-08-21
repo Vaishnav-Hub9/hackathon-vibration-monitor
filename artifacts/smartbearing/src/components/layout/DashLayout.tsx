@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/button';
 import NotificationBell from '@/components/layout/NotificationBell';
 import { getSocket } from '@/lib/socket';
 import { useActiveAlertsCount } from '@/hooks/useActiveAlertsCount';
+import AmbientCanvas from '@/components/ui/AmbientCanvas';
 
 interface DashLayoutProps {
   children: ReactNode;
@@ -47,7 +48,7 @@ export default function DashLayout({ children }: DashLayoutProps) {
     // Initial probe so the banner resolves immediately even before any socket event
     (async () => {
       try {
-        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+        const API_URL = import.meta.env.VITE_API_URL || ''; // same-origin via Vite dev proxy
         const res = await fetch(`${API_URL}/api/health/ml`, {
           headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` },
         });
@@ -109,7 +110,7 @@ export default function DashLayout({ children }: DashLayoutProps) {
   ];
 
   return (
-    <div className="min-h-screen bg-navy flex flex-col md:flex-row font-sans">
+    <div className="min-h-screen flex flex-col md:flex-row font-sans">
       {/* Sidebar */}
       <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-navy-card border-r border-navy transform ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 transition-transform duration-200 ease-in-out`}>
         <div className="flex items-center justify-between h-16 px-6 border-b border-navy">
@@ -165,8 +166,9 @@ export default function DashLayout({ children }: DashLayoutProps) {
 
       {/* Main Content */}
       <main className="flex-1 md:ml-64 flex flex-col min-h-screen relative">
-        {/* Ambient background — aurora + grid + noise for every dashboard page */}
+        {/* Ambient background — cinematic canvas + aurora + grid + noise for every dashboard page */}
         <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden>
+          <AmbientCanvas particles={45} opacity={0.85} />
           <div className="absolute inset-0 grid-bg opacity-[0.12]" />
           <div className="aurora aurora-animate w-[560px] h-[560px] bg-amber/[0.07] -top-56 -left-40" />
           <div className="aurora aurora-animate w-[480px] h-[480px] bg-[#3B82F6]/[0.06] top-1/3 -right-48" style={{ animationDelay: '-5s' }} />

@@ -19,6 +19,7 @@ import DigitalTwin from "@/pages/DigitalTwin";
 import Workflow from "@/pages/Workflow";
 import NotFound from "@/pages/not-found";
 import { useEffect, type ComponentType } from "react";
+import CursorGlow from "@/components/ui/CursorGlow";
 
 const queryClient = new QueryClient();
 
@@ -63,6 +64,7 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+          <CursorGlow />
           <ScrollToTopOnNavigate />
           <Router />
           <CommandPalette />

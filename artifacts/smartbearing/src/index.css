@@ -204,7 +204,25 @@
   * { @apply border-border; }
   body {
     @apply font-sans antialiased bg-background text-foreground;
-    background-color: #0a0a0a;
+    /* Cinematic deep-space base — layered radial washes over near-black,
+       so no viewport region ever reads as a flat fill. */
+    background-color: #050507;
+    background-image:
+      radial-gradient(1100px 700px at 12% -8%, rgba(59, 130, 246, 0.07), transparent 60%),
+      radial-gradient(900px 640px at 88% 18%, rgba(139, 92, 246, 0.06), transparent 62%),
+      radial-gradient(1000px 800px at 55% 108%, rgba(245, 158, 11, 0.05), transparent 60%),
+      linear-gradient(180deg, #0b0b10 0%, #060608 45%, #040405 100%);
+    background-attachment: fixed;
+    animation: cinematicWash 26s ease-in-out infinite;
+  }
+
+  /* Slow ambient color drift across the fixed background */
+  @keyframes cinematicWash {
+    0%, 100% { background-position: 0% 0%, 100% 20%, 55% 100%, 0 0; }
+    50% { background-position: 6% 4%, 92% 26%, 48% 94%, 0 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    body { animation: none; }
   }
 
   /* Matte scrollbar */
@@ -382,6 +400,75 @@
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
+  }
+
+  /* Mouse spotlight card — border + inner glow track the cursor via --sx/--sy */
+  .spotlight-card {
+    position: relative;
+  }
+  .spotlight-card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.35s ease;
+    background: radial-gradient(320px circle at var(--sx, 50%) var(--sy, 50%), rgba(96,165,250,0.10), transparent 65%);
+    z-index: 1;
+  }
+  .spotlight-card::after {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.35s ease;
+    background: radial-gradient(220px circle at var(--sx, 50%) var(--sy, 50%), rgba(96,165,250,0.55), transparent 70%);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    padding: 1px;
+  }
+  .spotlight-card:hover::before,
+  .spotlight-card:hover::after { opacity: 1; }
+
+  /* Beam of light sweeping down behind hero content */
+  .light-shaft {
+    position: absolute;
+    top: -20%;
+    left: 50%;
+    width: min(720px, 90vw);
+    height: 130%;
+    transform: translateX(-50%) rotate(2deg);
+    background: linear-gradient(180deg, rgba(96,165,250,0.08), rgba(96,165,250,0.02) 45%, transparent 75%);
+    clip-path: polygon(38% 0%, 62% 0%, 100% 100%, 0% 100%);
+    filter: blur(30px);
+    pointer-events: none;
+  }
+
+  /* Conic halo ring — slow rotating light sweep for hero/CTA frames */
+  .halo-ring {
+    position: absolute;
+    border-radius: 9999px;
+    pointer-events: none;
+    background: conic-gradient(from 0deg, transparent 0deg, rgba(96,165,250,0.14) 40deg, transparent 90deg, transparent 200deg, rgba(139,92,246,0.10) 250deg, transparent 300deg);
+    animation: haloSpin 18s linear infinite;
+    filter: blur(28px);
+  }
+  @keyframes haloSpin { to { transform: rotate(360deg); } }
+
+  /* Click ripple burst */
+  @keyframes sbClickRipple {
+    0% { transform: scale(0.4); opacity: 0.9; }
+    100% { transform: scale(3.2); opacity: 0; }
+  }
+  .sb-click-ripple {
+    animation: sbClickRipple 0.65s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    pointer-events: none;
+    box-shadow: 0 0 18px rgba(96,165,250,0.35);
   }
 
   /* Shimmer */

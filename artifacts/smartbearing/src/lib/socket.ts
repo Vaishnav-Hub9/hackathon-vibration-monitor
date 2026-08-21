@@ -1,6 +1,6 @@
 import { io, Socket } from 'socket.io-client';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const API_URL = import.meta.env.VITE_API_URL || ''; // same-origin; Vite dev proxy forwards /socket.io to the backend
 
 let socketInstance: Socket | null = null;
 

@@ -129,7 +129,7 @@ export default function Alerts() {
   }
   
   function exportAlertsCSV() {
-    window.location.href = `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/alerts/export/csv`;
+    window.location.href = `${import.meta.env.VITE_API_URL || ''}/api/alerts/export/csv`;
   }
 
   const activeCount = alertList.filter(a => a.status === 'active').length;
