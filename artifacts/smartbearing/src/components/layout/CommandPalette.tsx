@@ -51,6 +51,10 @@ export default function CommandPalette() {
     query === '' || n.label.toLowerCase().includes(query.toLowerCase())
   );
 
+  // Only show search trigger on dashboard pages (not landing/login/register)
+  const path = window.location.pathname;
+  const isDashboardPage = ['/dashboard','/machine','/predictions','/alerts','/analytics','/ml-analysis','/twin','/workflow','/hardware','/settings'].some(p => path.startsWith(p));
+
   return (
     <>
       <AnimatePresence>
@@ -191,8 +195,8 @@ export default function CommandPalette() {
         )}
       </AnimatePresence>
 
-      {/* Trigger hint shown on dashboard */}
-      {!open && (
+      {/* Trigger hint shown only on dashboard pages */}
+      {!open && isDashboardPage && (
         <button
           onClick={() => setOpen(true)}
           className="fixed top-4 left-1/2 -translate-x-1/2 z-30 hidden md:flex items-center gap-2 px-3 py-1.5 text-xs text-slate-500 bg-[#0F1629] border border-[#1E2D4A] rounded-lg hover:border-slate-600 hover:text-slate-300 transition-colors shadow-lg"

@@ -17,10 +17,10 @@ export default function DigitalTwin() {
         <div className="max-w-[1500px] mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
             <Link
-              href="/"
+              href="/dashboard"
               className="flex items-center gap-1.5 text-[11px] font-mono-data text-slate-400 hover:text-amber border border-navy bg-[#0F1629]/70 rounded-md px-2.5 py-1.5 transition-colors shrink-0"
             >
-              <ArrowLeft className="w-3.5 h-3.5" /> Back
+              <ArrowLeft className="w-3.5 h-3.5" /> Back to Dashboard
             </Link>
             <div className="min-w-0">
               <h1 className="font-display font-bold text-white text-sm sm:text-base truncate">
