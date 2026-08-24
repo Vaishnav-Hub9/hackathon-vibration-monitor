@@ -77,6 +77,7 @@ export default function Dashboard() {
   
   const [machines, setMachines] = useState<any[]>([]);
   const [alerts, setAlerts] = useState<any[]>([]);
+  const [selectedUnit, setSelectedUnit] = useState<string>(() => localStorage.getItem('selectedFactoryUnit') || '');
   const [summary, setSummary] = useState<any>({
     avgHealthScore: 0,
     estimatedSavings: 0,
@@ -106,8 +107,9 @@ export default function Dashboard() {
     let isMounted = true;
     const fetchData = async () => {
       try {
+        const unitParam = selectedUnit ? `?factoryUnit=${selectedUnit}` : '';
         const [machinesRes, summaryRes, alertsRes, roiRes] = await Promise.all([
-          machinesApi.getAll(),
+          machinesApi.getAll(selectedUnit ? { factoryUnit: selectedUnit } : undefined),
           analyticsApi.getSummary(),
           alertsApi.getAll({ status: 'active' }),
           analyticsApi.getROI()
@@ -167,7 +169,7 @@ export default function Dashboard() {
     const refreshFleet = () => {
       if (refreshTimer) clearTimeout(refreshTimer);
       refreshTimer = setTimeout(() => {
-        machinesApi.getAll().then((res: any) => {
+        machinesApi.getAll(selectedUnit ? { factoryUnit: selectedUnit } : undefined).then((res: any) => {
           if (isMounted && res.data?.data) setMachines(res.data.data);
         }).catch(() => {});
         analyticsApi.getSummary().then((res: any) => {
@@ -206,6 +208,25 @@ export default function Dashboard() {
       socket.off('alert:new', onAlertNew);
       socket.off('hardware:manual', onHardwareManual);
       socket.off('sensor:update', onSensorUpdate);
+    };
+  }, [selectedUnit]);
+
+  // Listen for factory unit changes from the sidebar dropdown
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'selectedFactoryUnit') {
+        setSelectedUnit(e.newValue || '');
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+    // Also poll every 2s for same-tab changes (storage event only fires cross-tab)
+    const poll = setInterval(() => {
+      const current = localStorage.getItem('selectedFactoryUnit') || '';
+      setSelectedUnit(prev => prev !== current ? current : prev);
+    }, 2000);
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      clearInterval(poll);
     };
   }, []);
 

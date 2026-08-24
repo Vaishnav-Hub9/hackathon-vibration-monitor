@@ -8,7 +8,11 @@ router.use(authenticateJWT);
 
 router.get('/', async (req: Request, res: Response): Promise<void> => {
   try {
-    const machines = await Machine.find().lean();
+    const filter: any = {};
+    if (req.query.factoryUnit) {
+      filter.factoryUnit = req.query.factoryUnit;
+    }
+    const machines = await Machine.find(filter).lean();
     
     const machinesWithHealth = await Promise.all(machines.map(async (m) => {
       const latestReading = await SpindleReading.findOne({ machineId: m.machineId })

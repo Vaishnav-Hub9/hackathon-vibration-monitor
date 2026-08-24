@@ -20,6 +20,7 @@ import {
 import { Button } from '@/components/ui/button';
 import NotificationBell from '@/components/layout/NotificationBell';
 import { getSocket } from '@/lib/socket';
+import { factoryUnitsApi } from '@/lib/api';
 import { useActiveAlertsCount } from '@/hooks/useActiveAlertsCount';
 import AmbientCanvas from '@/components/ui/AmbientCanvas';
 
@@ -36,12 +37,29 @@ export default function DashLayout({ children }: DashLayoutProps) {
   );
   const [mlOnline, setMlOnline] = useState<boolean | null>(null);
   const activeAlerts = useActiveAlertsCount();
+  const [factoryUnits, setFactoryUnits] = useState<any[]>([]);
+  const [selectedUnit, setSelectedUnit] = useState<string>(() => localStorage.getItem('selectedFactoryUnit') || '');
+  const [unitDropdownOpen, setUnitDropdownOpen] = useState(false);
 
   useEffect(() => {
     const timer = setInterval(() => {
       setTimeAgo((prev) => prev + 1);
     }, 1000);
     return () => clearInterval(timer);
+  }, []);
+
+  // Load factory units
+  useEffect(() => {
+    factoryUnitsApi.getAll().then(res => {
+      if (res.data?.data) {
+        setFactoryUnits(res.data.data);
+        // Auto-select first unit if none selected
+        if (!selectedUnit && res.data.data.length > 0) {
+          setSelectedUnit(res.data.data[0].unitId);
+          localStorage.setItem('selectedFactoryUnit', res.data.data[0].unitId);
+        }
+      }
+    }).catch(() => {});
   }, []);
 
   // Listen for real ML model status from the backend — no fake predictions
@@ -191,9 +209,65 @@ export default function DashLayout({ children }: DashLayoutProps) {
             <button className="md:hidden text-slate-300 hover:text-white" onClick={() => setIsMobileMenuOpen(true)}>
               <Menu className="w-6 h-6" />
             </button>
-            <div className="hidden sm:flex items-center gap-2 bg-[#141E35] border border-navy rounded-md px-3 py-1.5 cursor-pointer hover:border-amber/50 transition-colors">
-              <span className="text-sm font-medium text-slate-200">Factory Unit A (Sircilla)</span>
-              <ChevronDown className="w-4 h-4 text-slate-400" />
+            <div className="relative hidden sm:block">
+              <button
+                onClick={() => setUnitDropdownOpen(!unitDropdownOpen)}
+                className="flex items-center gap-2 bg-[#141E35] border border-navy rounded-md px-3 py-1.5 cursor-pointer hover:border-amber/50 transition-colors"
+              >
+                <span className="text-sm font-medium text-slate-200">
+                  {factoryUnits.find(u => u.unitId === selectedUnit)?.name || 'All Units'}
+                </span>
+                {factoryUnits.find(u => u.unitId === selectedUnit)?.location && (
+                  <span className="text-xs text-slate-500">
+                    ({factoryUnits.find(u => u.unitId === selectedUnit)?.location.split(',')[0]})
+                  </span>
+                )}
+                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${unitDropdownOpen ? 'rotate-180' : ''}`} />
+              </button>
+              {unitDropdownOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setUnitDropdownOpen(false)} />
+                  <div className="absolute left-0 top-full mt-1 w-64 bg-[#141E35] border border-navy rounded-lg shadow-2xl z-50 overflow-hidden">
+                    <div className="px-3 py-2 border-b border-navy">
+                      <span className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Select Factory Unit</span>
+                    </div>
+                    <div className="py-1">
+                      {factoryUnits.map((unit) => (
+                        <button
+                          key={unit.unitId}
+                          onClick={() => {
+                            setSelectedUnit(unit.unitId);
+                            localStorage.setItem('selectedFactoryUnit', unit.unitId);
+                            setUnitDropdownOpen(false);
+                          }}
+                          className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between transition-colors ${
+                            selectedUnit === unit.unitId
+                              ? 'bg-amber/10 text-amber'
+                              : 'text-slate-300 hover:bg-[#1A2540] hover:text-white'
+                          }`}
+                        >
+                          <div>
+                            <div className="font-medium">{unit.name}</div>
+                            <div className="text-xs text-slate-500">{unit.location}</div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-xs text-slate-400">{unit.machineCount || 0} machines</div>
+                            {selectedUnit === unit.unitId && <span className="text-[10px] text-amber">●</span>}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                    <div className="px-3 py-2 border-t border-navy">
+                      <button
+                        onClick={() => { setUnitDropdownOpen(false); setLocation('/settings'); }}
+                        className="w-full text-left text-xs text-amber hover:text-amber/80 transition-colors"
+                      >
+                        + Manage Factory Units
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           </div>
 

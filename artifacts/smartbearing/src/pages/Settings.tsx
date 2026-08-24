@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Slider } from '@/components/ui/slider';
 import { Save, Plus, BellRing, Settings as SettingsIcon, Factory, CheckCircle2, Mail, MessageCircle } from 'lucide-react';
-import { authApi, alertsApi } from '@/lib/api';
+import { authApi, alertsApi, factoryUnitsApi, machinesApi } from '@/lib/api';
 
 export default function Settings() {
   const [anomalyWarning, setAnomalyWarning] = useState([0.35]);
@@ -18,6 +18,10 @@ export default function Settings() {
   const [alertEmail, setAlertEmail] = useState('');
   const [alertWhatsapp, setAlertWhatsapp] = useState('');
   const [sendingTest, setSendingTest] = useState(false);
+  const [factoryUnits, setFactoryUnits] = useState<any[]>([]);
+  const [allMachines, setAllMachines] = useState<any[]>([]);
+  const [newUnit, setNewUnit] = useState({ unitId: '', name: '', location: '', description: '' });
+  const [selectedUnit, setSelectedUnit] = useState<string>('');
   const [sendingWa, setSendingWa] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -74,6 +78,56 @@ export default function Settings() {
     }
   };
   const saveProfile = () => notify('Factory profile saved');
+
+  // Load factory units
+  useEffect(() => {
+    factoryUnitsApi.getAll().then(res => {
+      if (res.data?.data) setFactoryUnits(res.data.data);
+    }).catch(() => {});
+    machinesApi.getAll().then(res => {
+      if (res.data?.data) setAllMachines(res.data.data);
+    }).catch(() => {});
+  }, []);
+
+  const handleCreateUnit = async () => {
+    if (!newUnit.unitId || !newUnit.name || !newUnit.location) {
+      notify('Please fill in all required fields');
+      return;
+    }
+    try {
+      await factoryUnitsApi.create(newUnit);
+      const res = await factoryUnitsApi.getAll();
+      if (res.data?.data) setFactoryUnits(res.data.data);
+      setNewUnit({ unitId: '', name: '', location: '', description: '' });
+      notify('Factory unit created!');
+    } catch (err: any) {
+      notify(err.response?.data?.error || 'Failed to create factory unit');
+    }
+  };
+
+  const handleDeleteUnit = async (unitId: string) => {
+    try {
+      await factoryUnitsApi.delete(unitId);
+      const res = await factoryUnitsApi.getAll();
+      if (res.data?.data) setFactoryUnits(res.data.data);
+      notify('Factory unit removed');
+    } catch (err: any) {
+      notify('Failed to delete factory unit');
+    }
+  };
+
+  const handleAssignMachines = async (unitId: string, machineIds: string[]) => {
+    try {
+      await factoryUnitsApi.assignMachines(unitId, machineIds);
+      const res = await factoryUnitsApi.getAll();
+      if (res.data?.data) setFactoryUnits(res.data.data);
+      const machinesRes = await machinesApi.getAll();
+      if (machinesRes.data?.data) setAllMachines(machinesRes.data.data);
+      notify('Machines assigned!');
+    } catch (err: any) {
+      notify('Failed to assign machines');
+    }
+  };
   const addNode = () => notify('Coming soon: edge node provisioning is handled at the gateway');
   const configureNode = (id: string) => notify(`Opening configuration for node ${id}`);
 
@@ -90,6 +144,7 @@ export default function Settings() {
             <TabsTrigger value="nodes" className="data-[state=active]:bg-navy-card data-[state=active]:text-amber text-slate-400">Sensor Nodes</TabsTrigger>
             <TabsTrigger value="thresholds" className="data-[state=active]:bg-navy-card data-[state=active]:text-amber text-slate-400">Alert Thresholds</TabsTrigger>
             <TabsTrigger value="notifications" className="data-[state=active]:bg-navy-card data-[state=active]:text-amber text-slate-400">Notifications</TabsTrigger>
+            <TabsTrigger value="units" className="data-[state=active]:bg-navy-card data-[state=active]:text-amber text-slate-400">Factory Units</TabsTrigger>
             <TabsTrigger value="profile" className="data-[state=active]:bg-navy-card data-[state=active]:text-amber text-slate-400">Factory Profile</TabsTrigger>
           </TabsList>
 
@@ -301,6 +356,80 @@ export default function Settings() {
           </TabsContent>
 
           {/* TAB 4: PROFILE */}
+          <TabsContent value="units" className="space-y-6">
+            {/* Create new factory unit */}
+            <div className="bg-navy-card border border-navy p-6 rounded-xl max-w-2xl">
+              <div className="flex items-center gap-3 mb-6 pb-6 border-b border-navy">
+                <Factory className="w-5 h-5 text-amber" />
+                <div>
+                  <h3 className="text-white font-bold text-lg">Add Factory Unit</h3>
+                  <p className="text-slate-400 text-sm mt-1">Register a new factory location to monitor.</p>
+                </div>
+              </div>
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-300">Unit ID *</label>
+                    <Input value={newUnit.unitId} onChange={e => setNewUnit(p => ({ ...p, unitId: e.target.value }))} placeholder="e.g. unit-c" className="bg-[#0A0E1A] border-navy text-white" />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-300">Unit Name *</label>
+                    <Input value={newUnit.name} onChange={e => setNewUnit(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Factory Unit C" className="bg-[#0A0E1A] border-navy text-white" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-300">Location *</label>
+                    <Input value={newUnit.location} onChange={e => setNewUnit(p => ({ ...p, location: e.target.value }))} placeholder="e.g. Hyderabad, Telangana" className="bg-[#0A0E1A] border-navy text-white" />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-300">Description</label>
+                    <Input value={newUnit.description} onChange={e => setNewUnit(p => ({ ...p, description: e.target.value }))} placeholder="Optional description" className="bg-[#0A0E1A] border-navy text-white" />
+                  </div>
+                </div>
+                <Button onClick={handleCreateUnit} className="bg-amber hover:bg-amber/90 text-navy font-bold">
+                  <Plus className="w-4 h-4 mr-2" /> Create Factory Unit
+                </Button>
+              </div>
+            </div>
+
+            {/* Existing factory units */}
+            <div className="bg-navy-card border border-navy p-6 rounded-xl max-w-2xl">
+              <h3 className="text-white font-bold text-lg mb-4">Existing Factory Units ({factoryUnits.length})</h3>
+              {factoryUnits.length === 0 ? (
+                <p className="text-slate-500 text-sm">No factory units yet. Create one above.</p>
+              ) : (
+                <div className="space-y-3">
+                  {factoryUnits.map((unit) => {
+                    const unitMachines = allMachines.filter(m => m.factoryUnit === unit.unitId);
+                    return (
+                      <div key={unit.unitId} className="p-4 rounded-lg bg-[#0A0E1A] border border-navy">
+                        <div className="flex items-center justify-between mb-2">
+                          <div>
+                            <span className="text-white font-semibold">{unit.name}</span>
+                            <span className="text-slate-500 text-xs ml-2">({unit.unitId})</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-slate-400">{unit.machineCount || unitMachines.length} machines</span>
+                            <button onClick={() => handleDeleteUnit(unit.unitId)} className="text-red-400 hover:text-red-300 text-xs px-2 py-1 rounded border border-red-500/20 hover:border-red-500/40 transition-colors">Remove</button>
+                          </div>
+                        </div>
+                        <p className="text-slate-400 text-xs mb-2">{unit.location}{unit.description ? ` — ${unit.description}` : ''}</p>
+                        {unitMachines.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5">
+                            {unitMachines.map(m => (
+                              <span key={m.machineId} className="text-[10px] px-2 py-0.5 rounded-full bg-navy border border-navy text-slate-300">{m.name || m.machineId}</span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </TabsContent>
+
           <TabsContent value="profile" className="space-y-6">
             <div className="bg-navy-card border border-navy p-6 rounded-xl max-w-2xl">
               <div className="flex items-center gap-3 mb-6 pb-6 border-b border-navy">

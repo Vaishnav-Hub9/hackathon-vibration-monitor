@@ -8,6 +8,7 @@ export interface IMachine extends Document {
   totalSpindles: number;
   status: 'healthy' | 'warning' | 'critical' | 'degrading';
   faultProfile?: string;
+  factoryUnit?: string;
   installedAt: Date;
   lastMaintenance: Date;
 }
@@ -20,6 +21,7 @@ const MachineSchema: Schema = new Schema({
   totalSpindles: { type: Number, required: true },
   status: { type: String, enum: ['healthy', 'warning', 'critical', 'degrading'], required: true },
   faultProfile: { type: String },
+  factoryUnit: { type: String, default: 'unit-1' },
   installedAt: { type: Date, required: true },
   lastMaintenance: { type: Date, required: true }
 });

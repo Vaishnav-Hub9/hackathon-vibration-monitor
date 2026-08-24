@@ -25,7 +25,7 @@ export const authApi = {
 };
 
 export const machinesApi = {
-  getAll: () => api.get('/machines'),
+  getAll: (params?: { factoryUnit?: string }) => api.get('/machines', { params }),
   getById: (id: string) => api.get(`/machines/${id}`),
   getSpindles: (id: string) => api.get(`/machines/${id}/spindles`),
   getHistory: (id: string, hours = 24) => api.get(`/machines/${id}/history?hours=${hours}`),
@@ -74,4 +74,16 @@ export const simulatorApi = {
   stop: () => api.post('/simulator/stop'),
   injectFault: (machineId: string, faultType: string) =>
     api.post('/simulator/inject-fault', { machineId, faultType })
+};
+
+export const factoryUnitsApi = {
+  getAll: () => api.get('/factory-units'),
+  getOne: (unitId: string) => api.get(`/factory-units/${unitId}`),
+  create: (data: { unitId: string; name: string; location: string; description?: string }) =>
+    api.post('/factory-units', data),
+  update: (unitId: string, data: { name?: string; location?: string; description?: string; isActive?: boolean }) =>
+    api.put(`/factory-units/${unitId}`, data),
+  delete: (unitId: string) => api.delete(`/factory-units/${unitId}`),
+  assignMachines: (unitId: string, machineIds: string[]) =>
+    api.post(`/factory-units/${unitId}/machines`, { machineIds }),
 };

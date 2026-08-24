@@ -38,13 +38,22 @@ async function seed(): Promise<void> {
     console.log('Seeded users');
 
     const machinesData = [
-      { machineId: 'M001', name: 'Ring Frame #1', location: 'Sircilla, Telangana', section: 'Main', totalSpindles: 400, status: 'healthy', installedAt: new Date(), lastMaintenance: new Date() },
-      { machineId: 'M002', name: 'Ring Frame #2', location: 'Sircilla, Telangana', section: 'Main', totalSpindles: 400, status: 'warning', faultProfile: 'Imbalance', installedAt: new Date(), lastMaintenance: new Date() },
-      { machineId: 'M003', name: 'Ring Frame #3', location: 'Sircilla, Telangana', section: 'Main', totalSpindles: 320, status: 'critical', faultProfile: 'Outer Race', installedAt: new Date(), lastMaintenance: new Date() },
-      { machineId: 'M004', name: 'Ring Frame #4', location: 'Sircilla, Telangana', section: 'Main', totalSpindles: 400, status: 'healthy', installedAt: new Date(), lastMaintenance: new Date() },
-      { machineId: 'M005', name: 'Winding Machine #1', location: 'Sircilla, Telangana', section: 'Winding', totalSpindles: 120, status: 'warning', faultProfile: 'Ball', installedAt: new Date(), lastMaintenance: new Date() },
-      { machineId: 'M006', name: 'Ring Frame #5', location: 'Factory Unit B', section: 'Main', totalSpindles: 400, status: 'warning', faultProfile: 'Misalignment', installedAt: new Date(), lastMaintenance: new Date() }
+      { machineId: 'M001', name: 'Ring Frame #1', location: 'Sircilla, Telangana', section: 'Main', totalSpindles: 400, status: 'healthy', factoryUnit: 'unit-a', installedAt: new Date(), lastMaintenance: new Date() },
+      { machineId: 'M002', name: 'Ring Frame #2', location: 'Sircilla, Telangana', section: 'Main', totalSpindles: 400, status: 'warning', faultProfile: 'Imbalance', factoryUnit: 'unit-a', installedAt: new Date(), lastMaintenance: new Date() },
+      { machineId: 'M003', name: 'Ring Frame #3', location: 'Sircilla, Telangana', section: 'Main', totalSpindles: 320, status: 'critical', faultProfile: 'Outer Race', factoryUnit: 'unit-a', installedAt: new Date(), lastMaintenance: new Date() },
+      { machineId: 'M004', name: 'Ring Frame #4', location: 'Sircilla, Telangana', section: 'Main', totalSpindles: 400, status: 'healthy', factoryUnit: 'unit-a', installedAt: new Date(), lastMaintenance: new Date() },
+      { machineId: 'M005', name: 'Winding Machine #1', location: 'Sircilla, Telangana', section: 'Winding', totalSpindles: 120, status: 'warning', faultProfile: 'Ball', factoryUnit: 'unit-a', installedAt: new Date(), lastMaintenance: new Date() },
+      { machineId: 'M006', name: 'Ring Frame #5', location: 'Warangal, Telangana', section: 'Main', totalSpindles: 400, status: 'warning', faultProfile: 'Misalignment', factoryUnit: 'unit-b', installedAt: new Date(), lastMaintenance: new Date() }
     ];
+
+    // Seed factory units
+    const { FactoryUnit } = await import('../models/FactoryUnit.js');
+    await FactoryUnit.deleteMany({});
+    await FactoryUnit.insertMany([
+      { unitId: 'unit-a', name: 'Factory Unit A', location: 'Sircilla, Telangana', description: 'Primary production facility', machineIds: ['M001', 'M002', 'M003', 'M004', 'M005'], isActive: true },
+      { unitId: 'unit-b', name: 'Factory Unit B', location: 'Warangal, Telangana', description: 'Secondary expansion unit', machineIds: ['M006'], isActive: true },
+    ]);
+    console.log('Seeded factory units');
 
     await Machine.insertMany(machinesData);
     console.log('Seeded machines');
