@@ -5,10 +5,10 @@ import DashLayout from '@/components/layout/DashLayout';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { useCountUp } from '@/hooks/useCountUp';
 import { useRealSensors } from '@/hooks/useRealSensors';
-import { machinesApi, analyticsApi, alertsApi } from '@/lib/api';
+import { machinesApi, analyticsApi, alertsApi, hardwareApi } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
 import { LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
-import { Activity, Clock, Cpu, ShieldAlert, BellRing, Wifi, TrendingUp, TrendingDown, Minus, Volume2, Square } from 'lucide-react';
+import { Activity, Clock, Cpu, ShieldAlert, BellRing, Wifi, TrendingUp, TrendingDown, Minus, Volume2, Square, PenLine, Gauge, Thermometer } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import WhatsAppAlert from '@/components/dashboard/WhatsAppAlert';
 import FaultInjector from '@/components/dashboard/FaultInjector';
@@ -34,6 +34,11 @@ export default function Dashboard() {
   const { playingKey, play, stop } = useFaultAudio();
   
   const [chartData, setChartData] = useState<any[]>([]);
+  const [manualReadings, setManualReadings] = useState<any[]>([]);
+  const [manualRpm, setManualRpm] = useState('');
+  const [manualTemp, setManualTemp] = useState('');
+  const [manualSubmitting, setManualSubmitting] = useState(false);
+  const [manualFeedback, setManualFeedback] = useState<{ok: boolean; msg: string} | null>(null);
   
   // The Fault Injector targets machines[0] (M001). Its verdict comes from the
   // Live Sensor Feed, which caps at 6 nodes — M003/M002 traffic can evict M001
@@ -96,17 +101,79 @@ export default function Dashboard() {
     
     const onAlertNew = (alert: any) => {
        setAlerts(prev => [alert, ...prev]);
+       refreshFleet();
     };
-    
+
+    // Debounced fleet refresh — machine cards (healthScore/status) and KPIs
+    // must update for EVERY rig/manual reading, not just ones that raise
+    // alerts. Healthy readings change M001's health score silently.
+    let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+    const refreshFleet = () => {
+      if (refreshTimer) clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(() => {
+        machinesApi.getAll().then((res: any) => {
+          if (isMounted && res.data?.data) setMachines(res.data.data);
+        }).catch(() => {});
+        analyticsApi.getSummary().then((res: any) => {
+          if (isMounted && res.data?.data) setSummary((prev: any) => ({ ...prev, ...res.data.data }));
+        }).catch(() => {});
+      }, 800);
+    };
+
+    const onHardwareManual = (reading: any) => {
+      setManualReadings(prev => [reading, ...prev].slice(0, 10));
+      refreshFleet();
+    };
+
+    const onSensorUpdate = (data: any) => {
+      // Physical rig frames (Arduino ingest) flow through as sensor:update —
+      // refresh machine cards/KPIs for those too.
+      if (data?.source === 'arduino' || data?.spindleId === 'RIG01' || data?.nodeId === 'RIG01') {
+        refreshFleet();
+      }
+    };
+
+    // Safety net: poll every 10 s so Machine Status cards / KPIs always
+    // converge to the database truth, even if a socket event was missed.
+    const pollTimer = setInterval(refreshFleet, 10_000);
+
     socket.on('fleet:summary', onFleetSummary);
     socket.on('alert:new', onAlertNew);
+    socket.on('hardware:manual', onHardwareManual);
+    socket.on('sensor:update', onSensorUpdate);
     
     return () => {
       isMounted = false;
+      clearInterval(pollTimer);
+      if (refreshTimer) clearTimeout(refreshTimer);
       socket.off('fleet:summary', onFleetSummary);
       socket.off('alert:new', onAlertNew);
+      socket.off('hardware:manual', onHardwareManual);
+      socket.off('sensor:update', onSensorUpdate);
     };
   }, []);
+
+  // Manual reading submission handler (Dashboard quick entry)
+  const handleManualSubmit = async () => {
+    const rpm = parseFloat(manualRpm);
+    if (!rpm || rpm <= 0) return;
+    setManualSubmitting(true);
+    setManualFeedback(null);
+    try {
+      await hardwareApi.submitManual({
+        rpm,
+        temperature: manualTemp ? parseFloat(manualTemp) : undefined,
+      });
+      setManualFeedback({ ok: true, msg: 'Submitted ✓' });
+      setManualRpm('');
+      setManualTemp('');
+      setTimeout(() => setManualFeedback(null), 3000);
+    } catch {
+      setManualFeedback({ ok: false, msg: 'Submit failed' });
+    } finally {
+      setManualSubmitting(false);
+    }
+  };
 
   const allSensors = liveSensors.slice(0, 6);
 
@@ -208,7 +275,14 @@ export default function Dashboard() {
               const deltaColor = s.vibDelta > 0.02 ? '#EA580C' : s.vibDelta < -0.02 ? '#10B981' : '#64748b';
               return (
                 <div key={`${s.machineId}-${s.id}`} className="p-3 flex flex-col gap-1 min-w-0">
-                  <div className="text-[10px] text-slate-500 font-mono-data truncate">{s.id}</div>
+                  <div className="flex items-center gap-1">
+                    <span className="text-[10px] text-slate-500 font-mono-data truncate">{s.id}</span>
+                    {(s.source === 'manual' || s.source === 'arduino') && (
+                      <span className={`text-[8px] font-bold px-1 py-px rounded ${
+                        s.source === 'manual' ? 'bg-amber/20 text-amber border border-amber/30' : 'bg-[#10B981]/15 text-[#10B981] border border-[#10B981]/30'
+                      }`}>{s.source === 'manual' ? 'MANUAL' : 'RIG'}</span>
+                    )}
+                  </div>
                   <div className="text-[10px] text-slate-400 truncate">{s.machineId}</div>
                   <div className="flex items-center gap-1 mt-1">
                     <AnimatePresence mode="wait">
@@ -313,7 +387,96 @@ export default function Dashboard() {
           ))}
         </div>
 
-        {/* Row 3: Charts & Alerts */}
+        {/* Row 3: Hardware Manual Input */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Manual entry quick form */}
+          <div className="bg-navy-card border border-navy rounded-xl overflow-hidden">
+            <div className="p-5 border-b border-navy flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <PenLine className="w-4 h-4 text-amber" />
+                <h3 className="text-white font-bold text-sm">Hardware Manual Input</h3>
+              </div>
+              <Link href="/hardware" className="text-xs text-amber hover:underline">Open Hardware Lab →</Link>
+            </div>
+            <div className="p-5 space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] text-slate-500 font-mono-data mb-1 block">RPM *</label>
+                  <input
+                    type="number"
+                    value={manualRpm}
+                    onChange={e => setManualRpm(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleManualSubmit()}
+                    placeholder="e.g. 1500"
+                    className="w-full bg-[#0A0E1A] border border-navy rounded-lg px-3 py-2 text-white text-sm font-mono-data placeholder:text-slate-600 focus:outline-none focus:border-amber/50 focus:ring-1 focus:ring-amber/30 transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-slate-500 font-mono-data mb-1 block">Temp °C</label>
+                  <input
+                    type="number"
+                    value={manualTemp}
+                    onChange={e => setManualTemp(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleManualSubmit()}
+                    placeholder="e.g. 55"
+                    className="w-full bg-[#0A0E1A] border border-navy rounded-lg px-3 py-2 text-white text-sm font-mono-data placeholder:text-slate-600 focus:outline-none focus:border-amber/50 focus:ring-1 focus:ring-amber/30 transition-all"
+                  />
+                </div>
+              </div>
+              <button
+                onClick={handleManualSubmit}
+                disabled={manualSubmitting || !manualRpm}
+                className="w-full bg-amber/20 hover:bg-amber/30 disabled:opacity-40 text-amber border border-amber/30 rounded-lg py-2 text-sm font-semibold transition-all active:scale-[0.98]"
+              >
+                {manualSubmitting ? 'Submitting…' : 'Submit Reading'}
+              </button>
+              {manualFeedback && (
+                <p className={`text-xs font-medium ${manualFeedback.ok ? 'text-[#10B981]' : 'text-[#EA580C]'}`}>{manualFeedback.msg}</p>
+              )}
+            </div>
+          </div>
+
+          {/* Recent manual readings feed */}
+          <div className="bg-navy-card border border-navy rounded-xl overflow-hidden flex flex-col">
+            <div className="p-5 border-b border-navy flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Activity className="w-4 h-4 text-[#3B82F6]" />
+                <h3 className="text-white font-bold text-sm">Manual Readings Feed</h3>
+              </div>
+              <span className="text-[10px] text-slate-500 font-mono-data">{manualReadings.length} entries</span>
+            </div>
+            <div className="flex-1 overflow-y-auto p-3 space-y-2 max-h-[260px]">
+              {manualReadings.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-8 text-slate-600">
+                  <PenLine className="w-8 h-8 mb-2 opacity-30" />
+                  <p className="text-xs">No manual readings yet</p>
+                  <p className="text-[10px] mt-1">Submit from the panel or Hardware Lab</p>
+                </div>
+              ) : (
+                manualReadings.map((r, i) => {
+                  const color = r.colour === 'red' ? '#EA580C' : r.colour === 'yellow' ? '#F59E0B' : '#10B981';
+                  const time = r.timestamp ? new Date(r.timestamp).toLocaleTimeString() : '';
+                  return (
+                    <div key={i} className="p-3 bg-[#0A0E1A] rounded-lg border-l-4" style={{ borderColor: color }}>
+                      <div className="flex justify-between items-start">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono-data text-sm font-bold text-white">{r.rpm} RPM</span>
+                          {r.temperature != null && (
+                            <span className="font-mono-data text-xs text-[#3B82F6]">{r.temperature}°C</span>
+                          )}
+                        </div>
+                        <span className="text-[10px] font-mono-data" style={{ color }}>{r.verdict}</span>
+                      </div>
+                      <div className="text-[10px] text-slate-500 mt-1 font-mono-data">{time} · manual</div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Row 4: Charts & Alerts */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-4">
           <div className="lg:col-span-2 bg-navy-card border border-navy p-5 rounded-xl">
             <h3 className="text-white font-bold mb-6">Fleet Vibration Trend (24h RMS)</h3>

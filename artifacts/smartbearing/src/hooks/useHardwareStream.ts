@@ -14,7 +14,7 @@ export type HardwareReading = {
   health_index: number;
   verdict: string;
   colour: string;
-  source: 'arduino' | 'simulator';
+  source: 'arduino' | 'simulator' | 'manual';
   timestamp: string;
 };
 
@@ -37,11 +37,13 @@ const OFFLINE_AFTER_MS = 3500;
 export function useHardwareStream() {
   const [liveReadings, setLiveReadings] = useState<HardwareReading[]>([]);
   const [datasetReadings, setDatasetReadings] = useState<HardwareReading[]>([]);
+  const [manualReadings, setManualReadings] = useState<HardwareReading[]>([]);
   const [isLive, setIsLive] = useState(false);
   const [online, setOnline] = useState(false);
-  const [lastSource, setLastSource] = useState<'arduino' | 'simulator' | null>(null);
+  const [lastSource, setLastSource] = useState<'arduino' | 'simulator' | 'manual' | null>(null);
   const liveBuffer = useRef<HardwareReading[]>([]);
   const datasetBuffer = useRef<HardwareReading[]>([]);
+  const manualBuffer = useRef<HardwareReading[]>([]);
   const lastArduinoAt = useRef(0);
 
   useEffect(() => {
@@ -68,8 +70,11 @@ export function useHardwareStream() {
           const all = data.readings.slice(-MAX_POINTS);
           const arduino = all.filter((r: HardwareReading) => r.source === 'arduino');
           const dataset = all.filter((r: HardwareReading) => r.source === 'simulator');
+          const manual = all.filter((r: HardwareReading) => r.source === 'manual');
           datasetBuffer.current = dataset;
           setDatasetReadings(dataset);
+          manualBuffer.current = manual;
+          setManualReadings(manual);
           liveBuffer.current = arduino;
           setLiveReadings(arduino);
           if (arduino.length > 0) lastArduinoAt.current = Date.now();
@@ -101,6 +106,10 @@ export function useHardwareStream() {
         // Simulator reference frames feed the analytics/dataset panels.
         datasetBuffer.current = [...datasetBuffer.current, reading].slice(-MAX_POINTS);
         setDatasetReadings(datasetBuffer.current);
+      } else if (reading.source === 'manual') {
+        // Operator-entered gauge readings get their own feed + update "latest".
+        manualBuffer.current = [...manualBuffer.current, reading].slice(-MAX_POINTS);
+        setManualReadings(manualBuffer.current);
       }
       if (reading.source) setLastSource(reading.source);
     };
@@ -123,6 +132,7 @@ export function useHardwareStream() {
 
   const liveLatest = liveReadings.length > 0 ? liveReadings[liveReadings.length - 1] : null;
   const datasetLatest = datasetReadings.length > 0 ? datasetReadings[datasetReadings.length - 1] : null;
+  const manualLatest = manualReadings.length > 0 ? manualReadings[manualReadings.length - 1] : null;
 
-  return { liveReadings, datasetReadings, liveLatest, datasetLatest, isLive, online, lastSource };
+  return { liveReadings, datasetReadings, manualReadings, liveLatest, datasetLatest, manualLatest, isLive, online, lastSource };
 }

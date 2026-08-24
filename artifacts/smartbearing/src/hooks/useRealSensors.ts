@@ -45,6 +45,7 @@ function toLiveSensor(data: SensorUpdate, prev?: LiveSensor): LiveSensor {
     mlConfidence: data.mlConfidence,
     vibDelta: prev ? +(vibrationRMS - prev.accel_z).toFixed(3) : 0,
     tempDelta: prev ? +(temperature - prev.temperature).toFixed(1) : 0,
+    source: data.source ?? prev?.source,
   };
 }
 
@@ -92,9 +93,13 @@ export function useRealSensors(machineId?: string) {
           updated[idx] = next;
           return updated;
         }
-        // Cap the fleet feed like the legacy hook (dashboard shows up to 6)
+        // Cap the fleet feed at 6, but PIN rig + manual nodes — the simulator
+        // streams many node IDs at high rate and would evict RIG01 instantly.
         if (!machineId && prev.length >= 6) {
-          return [next, ...prev.slice(0, 5)];
+          const isPinned = (s: LiveSensor) => s.source === 'arduino' || s.source === 'manual';
+          const pinned = prev.filter(isPinned);
+          const rest = prev.filter(s => !isPinned(s)).slice(0, 5 - pinned.length);
+          return [next, ...pinned, ...rest];
         }
         return [...prev, next];
       });

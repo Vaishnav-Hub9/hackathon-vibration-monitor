@@ -7,6 +7,8 @@ import { Machine } from "../models/Machine.js";
 import { augmentFromDataset } from "../lib/datasetAugmentation.js";
 import { getPreventionTips } from "../lib/prevention.js";
 import { notifyMailAlert } from "../lib/mail.js";
+import { notifyWhatsAppAlert, isWhatsAppConfigured } from "../lib/whatsapp.js";
+import { User } from "../models/User.js";
 
 const router = Router();
 
@@ -404,6 +406,26 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
           estimatedTimeToFailure: severity === "critical" ? "6-18 hours" : "3-7 days",
           detectedAt: newAlert.detectedAt,
         });
+
+        // WhatsApp alert via Bird — sent to the first user with a saved number
+        // (or MESSAGEBIRD_ALERT_TO when no user number is set). Fire-and-forget.
+        if (isWhatsAppConfigured()) {
+          void (async () => {
+            try {
+              const recipient = await User.findOne({ alertWhatsapp: { $ne: "" } }).select("alertWhatsapp");
+              await notifyWhatsAppAlert({
+                to: recipient?.alertWhatsapp,
+                machineId,
+                machineName: machine?.name ?? machineId,
+                severity,
+                message: newAlert.message,
+                technicianSummary,
+              });
+            } catch {
+              /* never block ingestion on delivery */
+            }
+          })();
+        }
 
         if (io) {
           const obj = newAlert.toObject();

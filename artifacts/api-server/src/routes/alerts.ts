@@ -1,8 +1,10 @@
 import { Router, Request, Response } from 'express';
 import { Alert } from '../models/Alert.js';
-import { authenticateJWT } from '../middleware/auth.js';
+import { authenticateJWT, type AuthRequest } from '../middleware/auth.js';
 import { Machine } from '../models/Machine.js';
 import { notifyMailAlert, isMailConfigured, type MailAlertPayload } from '../lib/mail.js';
+import { isWhatsAppConfigured, sendWhatsAppMessage } from '../lib/whatsapp.js';
+import { User } from '../models/User.js';
 
 const router = Router();
 router.use(authenticateJWT);
@@ -30,6 +32,40 @@ router.post('/test-email', async (_req: Request, res: Response): Promise<void> =
   };
   await notifyMailAlert(payload);
   res.json({ success: true });
+});
+
+// Fire a sample WhatsApp alert to the signed-in user's saved number —
+// used by Settings -> Notifications -> "Send Test WhatsApp".
+router.post('/test-whatsapp', async (req: AuthRequest, res: Response): Promise<void> => {
+  if (!isWhatsAppConfigured()) {
+    res.status(503).json({
+      success: false,
+      error: 'WhatsApp delivery not configured — add WHATSAPP_ACCESS_TOKEN and WHATSAPP_PHONE_NUMBER_ID in Settings → Environment (Keys tab). See https://developers.facebook.com/docs/whatsapp/cloud-api/get-started',
+    });
+    return;
+  }
+  const user = await User.findById(req.user.id).select('alertWhatsapp');
+  const to = user?.alertWhatsapp || process.env.MESSAGEBIRD_ALERT_TO || '';
+  if (!to) {
+    res.status(400).json({ success: false, error: 'No WhatsApp number set — save one in Settings → Notifications first' });
+    return;
+  }
+  const text = [
+    '⚙️ SmartBearing CRITICAL ALERT (test)',
+    'Machine: Bearing #4 - Conveyor Line A (M004)',
+    '',
+    'OUTER RACE fault detected with 94.2% confidence (test alert).',
+    '',
+    '🧠 Assessment: Outer race spalling likely; plan bearing replacement within shift.',
+    '',
+    '⚠️ Fault predictions are probabilistic — an engineer must confirm before action.',
+  ].join('\n');
+  const ok = await sendWhatsAppMessage(to, text);
+  if (!ok) {
+    res.status(502).json({ success: false, error: 'Bird rejected the message — check the channel ID / number format (+E.164)' });
+    return;
+  }
+  res.json({ success: true, data: { sentTo: to } });
 });
 
 router.get('/', async (req: Request, res: Response): Promise<void> => {

@@ -79,9 +79,10 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
 // Only whitelisted fields are accepted.
 router.patch('/me', authenticateJWT, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { alertEmail } = req.body ?? {};
+    const { alertEmail, alertWhatsapp } = req.body ?? {};
     const update: Record<string, string> = {};
     if (alertEmail !== undefined) update.alertEmail = String(alertEmail).trim();
+    if (alertWhatsapp !== undefined) update.alertWhatsapp = String(alertWhatsapp).trim();
 
     if (Object.keys(update).length === 0) {
       res.status(400).json({ success: false, error: 'Nothing to update' });

@@ -39,7 +39,8 @@ export const alertsApi = {
   getById: (id: string) => api.get(`/alerts/${id}`),
   acknowledge: (id: string) => api.patch(`/alerts/${id}/acknowledge`),
   resolve: (id: string) => api.patch(`/alerts/${id}/resolve`),
-  sendTestEmail: () => api.post('/alerts/test-email')
+  sendTestEmail: () => api.post('/alerts/test-email'),
+  sendTestWhatsApp: () => api.post('/alerts/test-whatsapp')
 };
 
 export const analyticsApi = {
@@ -62,7 +63,9 @@ export const mlApi = {
 };
 
 export const hardwareApi = {
-  getStream: () => api.get('/hardware/stream')
+  getStream: () => api.get('/hardware/stream'),
+  submitManual: (payload: { rpm: number; temperature?: number | null; motorSpeed?: number }) =>
+    api.post('/hardware/manual', payload)
 };
 
 export const simulatorApi = {

@@ -19,6 +19,7 @@ type LivePoint = {
   t: string;
   pwm: number | null;
   temperature: number | null;
+  rpm: number | null;
 };
 
 const OFFLINE_AFTER_MS = 3500;
@@ -64,12 +65,22 @@ export default function LiveReadingsChart({
         t: fmtTime(new Date()),
         pwm: prev?.pwm ?? null,
         temperature: prev?.temperature ?? null,
+        rpm: prev?.rpm ?? null,
       };
       if (data.source === 'arduino') {
         // Live connection heartbeat from the physical rig.
         lastArduinoAt.current = Date.now();
         point.pwm = Math.round(data.motorSpeed ?? 0);
+        point.rpm = typeof data.rpm === 'number' ? Math.round(data.rpm) : prev?.rpm ?? null;
+        point.temperature = typeof data.temperature === 'number' ? +data.temperature.toFixed(1) : prev?.temperature ?? null;
         setIsLive(true);
+      } else if (data.source === 'manual') {
+        // Operator-entered readings plot on the same curves so manual entries
+        // visibly move the graph and appear on the fleet dashboard.
+        point.rpm = Math.round(data.rpm);
+        if (typeof data.temperature === 'number' && data.temperature > 0) {
+          point.temperature = +data.temperature.toFixed(1);
+        }
       } else if (data.source === 'simulator') {
         // Dataset reference temperature.
         point.temperature = typeof data.temperature === 'number' ? +data.temperature.toFixed(1) : null;
@@ -100,6 +111,7 @@ export default function LiveReadingsChart({
   const hasData = points.length > 0;
   const hasPwm = points.some((p) => p.pwm !== null);
   const hasTemp = points.some((p) => p.temperature !== null);
+  const hasRpm = points.some((p) => p.rpm !== null);
 
   return (
     <div>
@@ -138,7 +150,10 @@ export default function LiveReadingsChart({
               <Line yAxisId="pwm" type="monotone" dataKey="pwm" name="Connection (PWM)" stroke="#A78BFA" strokeWidth={2} dot={false} isAnimationActive={false} />
             )}
             {hasTemp && (
-              <Line yAxisId="temp" type="monotone" dataKey="temperature" name="Temperature (dataset)" stroke="#3B82F6" strokeWidth={2} dot={false} isAnimationActive={false} />
+              <Line yAxisId="temp" type="monotone" dataKey="temperature" name="Temperature (°C)" stroke="#3B82F6" strokeWidth={2} dot={false} isAnimationActive={false} connectNulls />
+            )}
+            {hasRpm && (
+              <Line yAxisId="pwm" type="monotone" dataKey="rpm" name="RPM" stroke="#F59E0B" strokeWidth={2} dot={false} isAnimationActive={false} connectNulls />
             )}
           </ComposedChart>
         </ResponsiveContainer>

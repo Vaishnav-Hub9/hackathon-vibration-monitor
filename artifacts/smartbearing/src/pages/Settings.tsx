@@ -5,7 +5,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Slider } from '@/components/ui/slider';
-import { Save, Plus, BellRing, Settings as SettingsIcon, Factory, CheckCircle2, Mail } from 'lucide-react';
+import { Save, Plus, BellRing, Settings as SettingsIcon, Factory, CheckCircle2, Mail, MessageCircle } from 'lucide-react';
 import { authApi, alertsApi } from '@/lib/api';
 
 export default function Settings() {
@@ -16,7 +16,9 @@ export default function Settings() {
   const [vibWarning, setVibWarning] = useState([1.5]);
   const [vibCritical, setVibCritical] = useState([3.0]);
   const [alertEmail, setAlertEmail] = useState('');
+  const [alertWhatsapp, setAlertWhatsapp] = useState('');
   const [sendingTest, setSendingTest] = useState(false);
+  const [sendingWa, setSendingWa] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -27,6 +29,7 @@ export default function Settings() {
       .then((res) => {
         const user = res.data?.data ?? {};
         setAlertEmail(user.alertEmail || user.email || '');
+        setAlertWhatsapp(user.alertWhatsapp || '');
       })
       .catch(() => {});
   }, []);
@@ -40,8 +43,8 @@ export default function Settings() {
   const saveThresholds = () => notify(`Thresholds saved — anomaly warn ${anomalyWarning[0]}, crit ${anomalyCritical[0]}`);
   const saveNotifications = async () => {
     try {
-      await authApi.updateMe({ alertEmail });
-      notify(alertEmail ? `Alert email saved — warnings will go to ${alertEmail}` : 'Alert email cleared — using your account email');
+      await authApi.updateMe({ alertEmail, alertWhatsapp });
+      notify(alertWhatsapp ? `Saved — WhatsApp alerts will go to ${alertWhatsapp}` : alertEmail ? `Alert email saved — ${alertEmail}` : 'Notification settings saved');
     } catch {
       notify('Failed to save alert email');
     }
@@ -56,6 +59,18 @@ export default function Settings() {
       notify(err?.response?.data?.error || 'Failed to send test email');
     } finally {
       setSendingTest(false);
+    }
+  };
+  const sendTestWhatsApp = async () => {
+    setSendingWa(true);
+    try {
+      if (alertWhatsapp) await authApi.updateMe({ alertWhatsapp });
+      await alertsApi.sendTestWhatsApp();
+      notify(`Test WhatsApp alert sent to ${alertWhatsapp}`);
+    } catch (err: any) {
+      notify(err?.response?.data?.error || 'Failed to send test WhatsApp');
+    } finally {
+      setSendingWa(false);
     }
   };
   const saveProfile = () => notify('Factory profile saved');
@@ -221,6 +236,29 @@ export default function Settings() {
                   >
                     <Mail className="w-4 h-4 mr-2" />
                     {sendingTest ? 'Sending…' : 'Send Test Alert Email'}
+                  </Button>
+                </div>
+
+                <div className="space-y-2 pt-4 border-t border-navy/50">
+                  <label className="text-sm font-medium text-slate-300">WhatsApp Alert Number</label>
+                  <Input
+                    type="tel"
+                    value={alertWhatsapp}
+                    onChange={(e) => setAlertWhatsapp(e.target.value)}
+                    placeholder="+919876543210"
+                    className="bg-[#0A0E1A] border-navy text-white max-w-xs font-mono-data"
+                  />
+                  <p className="text-xs text-slate-500">
+                    Critical alerts are sent here via WhatsApp (Meta Cloud API — free test number included). Use international format incl. country code. Leave empty to disable.
+                  </p>
+                  <Button
+                    onClick={sendTestWhatsApp}
+                    disabled={sendingWa}
+                    className="mt-3 border border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10 font-semibold"
+                    variant="outline"
+                  >
+                    <MessageCircle className="w-4 h-4 mr-2" />
+                    {sendingWa ? 'Sending…' : 'Send Test WhatsApp Alert'}
                   </Button>
                 </div>
 

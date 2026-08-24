@@ -65,3 +65,10 @@ __pycache__/
 # Windows junk
 nul
 *.nul
+-e 
+# Python virtual environments
+.venv
+**/.venv
+
+# Dev logs
+.dev-mongo.log

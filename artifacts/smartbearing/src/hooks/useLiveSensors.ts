@@ -19,6 +19,8 @@ export type LiveSensor = {
   mlConfidence?: number;
   vibDelta: number;
   tempDelta: number;
+  /** Reading provenance: 'arduino' (physical rig), 'manual', 'smartphone', 'simulator' */
+  source?: string;
 };
 
 export function useLiveSensors(machineId?: string) {
