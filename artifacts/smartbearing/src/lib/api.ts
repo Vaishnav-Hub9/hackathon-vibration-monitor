@@ -65,7 +65,8 @@ export const mlApi = {
 export const hardwareApi = {
   getStream: () => api.get('/hardware/stream'),
   submitManual: (payload: { rpm: number; temperature?: number | null; motorSpeed?: number }) =>
-    api.post('/hardware/manual', payload)
+    api.post('/hardware/manual', payload),
+  getRecentCaptures: (limit = 20) => api.get(`/sensor-readings?limit=${limit}`),
 };
 
 export const simulatorApi = {

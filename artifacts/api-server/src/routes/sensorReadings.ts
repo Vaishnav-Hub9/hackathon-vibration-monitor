@@ -476,6 +476,29 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// GET /api/sensor-readings — last 50 readings across all machines
+// ─────────────────────────────────────────────────────────────────────────────
+router.get("/", (req: Request, res: Response): void => {
+  const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+  const recent = readings.slice(0, limit).map((r, i) => ({
+    id: `${r.machineId}-${r.receivedAt}`,
+    machineId: r.machineId,
+    nodeId: r.nodeId,
+    rpm: r.rpm,
+    temperature: r.temperature,
+    vibrationRMS: r.vibrationRMS,
+    anomalyScore: r.anomalyScore,
+    healthScore: r.healthScore,
+    mlLabel: r.mlLabel,
+    mlConfidence: r.mlConfidence,
+    captureMethod: r.captureMethod,
+    technicianSummary: r.technicianSummary,
+    timestamp: r.timestamp,
+  }));
+  res.json(recent);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // GET /api/sensor-readings/:machineId — last 100 smartphone readings
 // ─────────────────────────────────────────────────────────────────────────────
 router.get("/:machineId", (req: Request, res: Response): void => {

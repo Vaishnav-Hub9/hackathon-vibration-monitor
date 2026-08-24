@@ -15,6 +15,62 @@ import FaultInjector from '@/components/dashboard/FaultInjector';
 import FleetCopilot from '@/components/dashboard/FleetCopilot';
 import LiveBearingWidget from '@/components/dashboard/LiveBearingWidget';
 import { useFaultAudio, toneForStatus, AUDITION_RPM } from '@/lib/faultSound';
+import { Mic, Smartphone } from 'lucide-react';
+
+function AcousticCapturesCard() {
+  const [captures, setCaptures] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    const load = () => {
+      hardwareApi.getRecentCaptures(10).then(res => {
+        if (active) { setCaptures(Array.isArray(res.data) ? res.data : []); setLoading(false); }
+      }).catch(() => { if (active) setLoading(false); });
+    };
+    load();
+    const iv = setInterval(load, 8000);
+    return () => { active = false; clearInterval(iv); };
+  }, []);
+
+  return (
+    <div className="bg-navy-card border border-navy rounded-xl p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <Smartphone className="w-4 h-4 text-amber" />
+        <h3 className="text-sm font-semibold text-white">Recent Acoustic Captures</h3>
+        <a href="/capture/" target="_blank" rel="noopener noreferrer" className="ml-auto text-[11px] text-amber hover:text-amber/80 transition-colors">Open Capture App ↗</a>
+      </div>
+      {loading ? (
+        <p className="text-xs text-slate-500">Loading...</p>
+      ) : captures.length === 0 ? (
+        <p className="text-xs text-slate-500">No captures yet. Open the <a href="/capture/" target="_blank" className="text-amber underline">Capture App</a> and record a reading.</p>
+      ) : (
+        <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+          {captures.map((c, i) => {
+            const score = c.anomalyScore ?? 0;
+            const color = score > 0.7 ? 'text-red-400 border-red-500/30' : score > 0.4 ? 'text-amber border-amber/30' : 'text-emerald-400 border-emerald-500/30';
+            const verdict = c.mlLabel || (score > 0.7 ? 'ANOMALY' : score > 0.4 ? 'WARNING' : 'HEALTHY');
+            return (
+              <div key={c.id || i} className={`flex items-center justify-between text-xs p-2 rounded-lg bg-[#0F1629] border ${color.split(' ')[1]}`}>
+                <div className="flex items-center gap-2">
+                  <Mic className={`w-3.5 h-3.5 ${color.split(' ')[0]}`} />
+                  <span className="text-slate-300">{c.machineId || 'M001'}</span>
+                </div>
+                <div className="flex items-center gap-3 text-slate-400">
+                  <span>{c.vibrationRMS?.toFixed(2) ?? '-'}g</span>
+                  <span>{c.temperature?.toFixed(0) ?? '-'}°C</span>
+                  <span>{c.rpm ?? '-'} RPM</span>
+                  <span className={`font-semibold ${color.split(' ')[0]}`}>{verdict}</span>
+                  <span className="text-[10px] text-slate-600">{c.captureMethod || 'audio'}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Dashboard() {
   const [, setLocation] = useLocation();
@@ -310,6 +366,9 @@ export default function Dashboard() {
             })}
           </div>
         </div>
+
+        {/* Acoustic Captures */}
+        <AcousticCapturesCard />
 
         {/* Fault Injector + digital twin — live ML demo panel */}
         {injectorMachine && (

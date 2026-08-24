@@ -14,7 +14,8 @@ import {
   LogOut,
   LogIn,
   ChevronDown,
-  Cpu
+  Cpu,
+  Smartphone
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import NotificationBell from '@/components/layout/NotificationBell';
@@ -106,6 +107,7 @@ export default function DashLayout({ children }: DashLayoutProps) {
     { href: '/twin', icon: Boxes, label: 'Digital Twin' },
     { href: '/workflow', icon: Workflow, label: 'Pipeline' },
     { href: '/hardware', icon: CircuitBoard, label: 'Hardware Lab' },
+    { href: '/capture', icon: Smartphone, label: 'Acoustic Capture', external: true },
     { href: '/settings', icon: SettingsIcon, label: 'Settings' },
   ];
 
@@ -132,8 +134,12 @@ export default function DashLayout({ children }: DashLayoutProps) {
           {navItems.map((item) => {
             const isActive = location === item.href || (location.startsWith('/machine') && item.href.startsWith('/machine'));
             const Icon = item.icon;
+            const linkProps = (item as any).external
+              ? { href: item.href, target: '_blank', rel: 'noopener noreferrer', className: 'block' as const }
+              : { href: item.href, className: 'block' as const };
+            const Tag = (item as any).external ? 'a' : Link;
             return (
-              <Link key={item.href} href={item.href} className="block">
+              <Tag key={item.href} {...linkProps}>
                 <div className={`relative flex items-center justify-between px-3 py-2.5 rounded-lg cursor-pointer transition-all duration-150 ${isActive ? 'bg-[#141E35] text-amber shadow-[inset_0_0_0_1px_rgba(245,158,11,0.15)]' : 'text-slate-300 hover:bg-[#141E35] hover:text-white'}`}>
                   {isActive && (
                     <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-r-full bg-gradient-to-b from-amber to-[#EA580C] shadow-[0_0_10px_rgba(245,158,11,0.7)]" />
@@ -142,13 +148,14 @@ export default function DashLayout({ children }: DashLayoutProps) {
                     <Icon className={`w-5 h-5 ${isActive ? 'text-amber' : ''}`} />
                     <span className="font-medium text-sm">{item.label}</span>
                   </div>
+                  {(item as any).external && <span className="text-[10px] text-slate-500 ml-1">↗</span>}
                   {item.badge != null && item.badge > 0 && (
                     <span className="bg-[#EA580C] text-white text-xs font-bold min-w-[20px] h-5 px-1.5 flex items-center justify-center rounded-full">
                       {item.badge > 99 ? '99+' : item.badge}
                     </span>
                   )}
                 </div>
-              </Link>
+              </Tag>
             );
           })}
         </nav>
