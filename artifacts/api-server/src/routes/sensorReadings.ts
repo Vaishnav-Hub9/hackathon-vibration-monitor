@@ -476,11 +476,15 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GET /api/sensor-readings — last 50 readings across all machines
+// GET /api/sensor-readings — last N readings across all machines
+// Combines in-memory capture readings + MongoDB SpindleReading docs
+// (hardware/manual readings are persisted to MongoDB by hardware.ts)
 // ─────────────────────────────────────────────────────────────────────────────
-router.get("/", (req: Request, res: Response): void => {
+router.get("/", async (req: Request, res: Response): Promise<void> => {
   const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
-  const recent = readings.slice(0, limit).map((r, i) => ({
+
+  // In-memory capture readings (phone PWA)
+  const memReadings = readings.slice(0, limit).map((r) => ({
     id: `${r.machineId}-${r.receivedAt}`,
     machineId: r.machineId,
     nodeId: r.nodeId,
@@ -495,7 +499,34 @@ router.get("/", (req: Request, res: Response): void => {
     technicianSummary: r.technicianSummary,
     timestamp: r.timestamp,
   }));
-  res.json(recent);
+
+  // MongoDB readings (hardware rig + manual entries)
+  const dbReadings = await SpindleReading.find()
+    .sort({ timestamp: -1 })
+    .limit(limit)
+    .lean();
+  const mappedDb = dbReadings.map((r) => ({
+    id: `${r.machineId}-${r.spindleId}-${new Date(r.timestamp).getTime()}`,
+    machineId: r.machineId,
+    nodeId: r.spindleId,
+    rpm: r.rpm ?? null,
+    temperature: r.temperature ?? null,
+    vibrationRMS: Math.sqrt((r.accel_x ?? 0) ** 2 + (r.accel_y ?? 0) ** 2 + (r.accel_z ?? 0) ** 2),
+    anomalyScore: r.anomalyFlag ? 0.8 : 0,
+    healthScore: r.healthScore ?? 100,
+    mlLabel: r.mlLabel ?? null,
+    mlConfidence: r.mlConfidence ?? null,
+    captureMethod: 'hardware',
+    source: r.source ?? 'hardware',
+    timestamp: r.timestamp,
+  }));
+
+  // Merge + dedupe + sort by timestamp desc
+  const all = [...memReadings, ...mappedDb]
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+    .slice(0, limit);
+
+  res.json(all);
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
