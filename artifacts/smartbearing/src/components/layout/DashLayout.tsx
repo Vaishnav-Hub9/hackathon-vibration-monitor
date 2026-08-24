@@ -4,7 +4,7 @@ import {
   LayoutDashboard, 
   Activity, 
   AlertTriangle, 
-  BarChart3, 
+  BarChart3,
   Settings as SettingsIcon,
   Boxes,
   Workflow,
@@ -15,7 +15,8 @@ import {
   LogIn,
   ChevronDown,
   Cpu,
-  Smartphone
+  Smartphone,
+  Box
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import NotificationBell from '@/components/layout/NotificationBell';
@@ -123,6 +124,7 @@ export default function DashLayout({ children }: DashLayoutProps) {
     { href: '/analytics', icon: BarChart3, label: 'Analytics' },
     { href: '/ml-analysis', icon: BrainCircuit, label: 'ML Analysis' },
     { href: '/twin', icon: Boxes, label: 'Digital Twin' },
+    { href: '/twin/bench', icon: Box, label: '3D Digital Twin' },
     { href: '/workflow', icon: Workflow, label: 'Pipeline' },
     { href: '/hardware', icon: CircuitBoard, label: 'Hardware Lab' },
     { href: '/capture', icon: Smartphone, label: 'Acoustic Capture', external: true },
@@ -150,7 +152,11 @@ export default function DashLayout({ children }: DashLayoutProps) {
         
         <nav className="p-4 space-y-1">
           {navItems.map((item) => {
-            const isActive = location === item.href || (location.startsWith('/machine') && item.href.startsWith('/machine'));
+            const isActive = item.href === '/twin'
+              ? location === '/twin'
+              : item.href === '/twin/bench'
+                ? location === '/twin/bench'
+                : location === item.href || (location.startsWith('/machine') && item.href.startsWith('/machine'));
             const Icon = item.icon;
             const linkProps = (item as any).external
               ? { href: item.href, target: '_blank', rel: 'noopener noreferrer', className: 'block' as const }

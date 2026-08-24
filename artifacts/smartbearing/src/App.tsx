@@ -16,6 +16,7 @@ import MlAnalysis from "@/pages/MlAnalysis";
 import HardwareLab from "@/pages/HardwareLab";
 import Settings from "@/pages/Settings";
 import DigitalTwin from "@/pages/DigitalTwin";
+import DigitalTwinBench from "@/pages/DigitalTwinBench";
 import Workflow from "@/pages/Workflow";
 import NotFound from "@/pages/not-found";
 import { useEffect, type ComponentType } from "react";
@@ -43,6 +44,7 @@ function Router() {
       <Route path="/" component={Landing} />
       <Route path="/bearing/exploded" component={BearingExploded} />
       <Route path="/twin" component={DigitalTwin} />
+      <Route path="/twin/bench" component={DigitalTwinBench} />
       <Route path="/workflow" component={Workflow} />
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />

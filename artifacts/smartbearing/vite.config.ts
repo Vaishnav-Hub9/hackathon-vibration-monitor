@@ -53,9 +53,9 @@ export default defineConfig({
     // Dev-only proxy so the browser talks to the API/socket servers same-origin
     // (the preview only exposes this port). No HMR settings are touched.
     proxy: {
-      "/api": { target: "http://127.0.0.1:5000", changeOrigin: true },
-      "/socket.io": { target: "http://127.0.0.1:5000", ws: true, changeOrigin: true },
-      "/capture": { target: "http://127.0.0.1:5000", changeOrigin: true },
+      "/api": { target: `http://127.0.0.1:${process.env.API_PORT || 5000}`, changeOrigin: true },
+      "/socket.io": { target: `http://127.0.0.1:${process.env.API_PORT || 5000}`, ws: true, changeOrigin: true },
+      "/capture": { target: `http://127.0.0.1:${process.env.API_PORT || 5000}`, changeOrigin: true },
     },
     fs: {
       strict: true,
