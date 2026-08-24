@@ -72,3 +72,6 @@ nul
 
 # Dev logs
 .dev-mongo.log
+-e 
+# Core dumps
+core
