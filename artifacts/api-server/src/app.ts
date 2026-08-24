@@ -36,7 +36,7 @@ app.use("/api", router);
 // Serve the phone capture PWA at /capture/ (single static HTML file).
 const captureRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
-  "../../smartbearing-capture",
+  "../../../smartbearing-capture",
 );
 app.use(
   "/capture",
