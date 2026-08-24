@@ -11,27 +11,65 @@ router.use(authenticateJWT);
 
 // Fire a sample warning email immediately to every configured recipient —
 // used by Settings -> Notifications -> "Send Test Alert Email" for demos.
-router.post('/test-email', async (_req: Request, res: Response): Promise<void> => {
-  if (!isMailConfigured()) {
-    res.status(503).json({
-      success: false,
-      error: 'Email delivery not configured — set SMTP_USER / SMTP_PASS in the api-server .env',
+router.post('/test-email', async (req: AuthRequest, res: Response): Promise<void> => {
+  const user = await User.findById(req.user.id).select('email alertEmail');
+  const to = user?.alertEmail || user?.email || '';
+
+  if (isMailConfigured()) {
+    // Real SMTP delivery
+    const payload: MailAlertPayload = {
+      machineId: 'M004',
+      machineName: 'Bearing #4 - Conveyor Line A',
+      severity: 'critical',
+      message: 'OUTER RACE fault detected with 94.2% confidence (test alert).',
+      technicianSummary: 'Outer race spalling likely; plan bearing replacement within shift.',
+      prevention: ['Replace bearing', 'Check lubrication'],
+      anomalyScore: 0.87,
+      estimatedTimeToFailure: '6-18 hours',
+      detectedAt: new Date(),
+    };
+    await notifyMailAlert(payload);
+    res.json({ success: true, message: 'Test email sent via SMTP' });
+  } else {
+    // Simulated delivery — create a real alert in the database so it shows
+    // up on the Dashboard and Alerts page.
+    const alert = await Alert.create({
+      machineId: 'M004',
+      spindleId: 'SN004',
+      severity: 'critical',
+      type: 'OUTER RACE',
+      message: `[TEST EMAIL] OUTER RACE fault detected with 94.2% confidence on Bearing #4 - Conveyor Line A.`,
+      anomalyScore: 0.87,
+      status: 'active',
+      detectedAt: new Date(),
+      technicianSummary: 'Outer race spalling likely; plan bearing replacement within shift.',
+      evidence: {
+        label: 'OUTER RACE',
+        confidence: 0.942,
+        dominantFreq: 180,
+        rpm: 14400,
+        peaks: [{ freq: 180, amplitude: 0.87 }],
+      },
     });
-    return;
+
+    // Broadcast to dashboard
+    try {
+      const { getIo } = await import('../socket.js');
+      const io = getIo();
+      if (io) {
+        io.to('fleet').emit('alert:new', alert);
+        io.to('fleet').emit('fleet:summary', {
+          alertsToday: await Alert.countDocuments({ detectedAt: { $gte: new Date(Date.now() - 86400000) } }),
+        });
+      }
+    } catch {}
+
+    res.json({
+      success: true,
+      message: to ? `Test alert created (email would be sent to ${to} — configure SMTP for real delivery)` : 'Test alert created (simulated — set alert email in profile for real delivery)',
+      simulated: true,
+    });
   }
-  const payload: MailAlertPayload = {
-    machineId: 'M004',
-    machineName: 'Bearing #4 - Conveyor Line A',
-    severity: 'critical',
-    message: 'OUTER RACE fault detected with 94.2% confidence (test alert).',
-    technicianSummary: 'Outer race spalling likely; plan bearing replacement within shift.',
-    prevention: ['Replace bearing', 'Check lubrication'],
-    anomalyScore: 0.87,
-    estimatedTimeToFailure: '6-18 hours',
-    detectedAt: new Date(),
-  };
-  await notifyMailAlert(payload);
-  res.json({ success: true });
 });
 
 // Fire a sample WhatsApp alert to the signed-in user's saved number —

@@ -76,6 +76,12 @@ export const simulatorApi = {
     api.post('/simulator/inject-fault', { machineId, faultType })
 };
 
+export const factoryProfileApi = {
+  get: () => api.get('/factory-profile'),
+  update: (data: { unitName?: string; location?: string; shiftTimings?: string; description?: string }) =>
+    api.put('/factory-profile', data),
+};
+
 export const factoryUnitsApi = {
   getAll: () => api.get('/factory-units'),
   getOne: (unitId: string) => api.get(`/factory-units/${unitId}`),

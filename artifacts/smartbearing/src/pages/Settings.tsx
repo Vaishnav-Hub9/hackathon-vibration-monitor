@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Slider } from '@/components/ui/slider';
 import { Save, Plus, BellRing, Settings as SettingsIcon, Factory, CheckCircle2, Mail, MessageCircle } from 'lucide-react';
-import { authApi, alertsApi, factoryUnitsApi, machinesApi } from '@/lib/api';
+import { authApi, alertsApi, factoryUnitsApi, machinesApi, factoryProfileApi } from '@/lib/api';
 
 export default function Settings() {
   const [anomalyWarning, setAnomalyWarning] = useState([0.35]);
@@ -22,6 +22,7 @@ export default function Settings() {
   const [allMachines, setAllMachines] = useState<any[]>([]);
   const [newUnit, setNewUnit] = useState({ unitId: '', name: '', location: '', description: '' });
   const [selectedUnit, setSelectedUnit] = useState<string>('');
+  const [profile, setProfile] = useState({ unitName: 'Factory Unit A', location: 'Sircilla, Telangana', shiftTimings: '24x7 (3 Shifts)', description: '' });
   const [sendingWa, setSendingWa] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -77,9 +78,25 @@ export default function Settings() {
       setSendingWa(false);
     }
   };
-  const saveProfile = () => notify('Factory profile saved');
+  const saveProfile = async () => {
+    try {
+      await factoryProfileApi.update(profile);
+      notify('Factory profile saved!');
+    } catch (err: any) {
+      notify('Failed to save profile');
+    }
+  };
 
-  // Load factory units
+  const loadProfile = useCallback(() => {
+    factoryProfileApi.get().then(res => {
+      if (res.data?.data) {
+        const p = res.data.data;
+        setProfile({ unitName: p.unitName || '', location: p.location || '', shiftTimings: p.shiftTimings || '24x7 (3 Shifts)', description: p.description || '' });
+      }
+    }).catch(() => {});
+  }, []);
+
+  // Load factory units + profile
   useEffect(() => {
     factoryUnitsApi.getAll().then(res => {
       if (res.data?.data) setFactoryUnits(res.data.data);
@@ -87,7 +104,8 @@ export default function Settings() {
     machinesApi.getAll().then(res => {
       if (res.data?.data) setAllMachines(res.data.data);
     }).catch(() => {});
-  }, []);
+    loadProfile();
+  }, [loadProfile]);
 
   const handleCreateUnit = async () => {
     if (!newUnit.unitId || !newUnit.name || !newUnit.location) {
@@ -443,22 +461,22 @@ export default function Settings() {
               <div className="space-y-4">
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-slate-300">Unit Name</label>
-                  <Input defaultValue="Factory Unit A" className="bg-[#0A0E1A] border-navy text-white" />
+                  <Input value={profile.unitName} onChange={e => setProfile(p => ({ ...p, unitName: e.target.value }))} className="bg-[#0A0E1A] border-navy text-white" />
                 </div>
                 
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-slate-300">Location</label>
-                  <Input defaultValue="Sircilla, Telangana" className="bg-[#0A0E1A] border-navy text-white" />
+                  <Input value={profile.location} onChange={e => setProfile(p => ({ ...p, location: e.target.value }))} className="bg-[#0A0E1A] border-navy text-white" />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-slate-300">Total Monitored Machines</label>
-                    <Input defaultValue="5" readOnly disabled className="bg-[#0A0E1A]/50 border-navy/50 text-slate-400 font-mono-data" />
+                    <Input value={allMachines.length.toString()} readOnly disabled className="bg-[#0A0E1A]/50 border-navy/50 text-slate-400 font-mono-data" />
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-slate-300">Shift Timings</label>
-                    <select className="w-full bg-[#0A0E1A] border border-navy text-white rounded-md h-10 px-3 text-sm focus:ring-amber focus:border-amber outline-none">
+                    <select value={profile.shiftTimings} onChange={e => setProfile(p => ({ ...p, shiftTimings: e.target.value }))} className="w-full bg-[#0A0E1A] border border-navy text-white rounded-md h-10 px-3 text-sm focus:ring-amber focus:border-amber outline-none">
                       <option>24x7 (3 Shifts)</option>
                       <option>16x7 (2 Shifts)</option>
                       <option>12x6 (1.5 Shifts)</option>

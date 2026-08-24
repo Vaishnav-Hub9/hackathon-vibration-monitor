@@ -11,6 +11,7 @@ import sensorReadingsRouter from "./sensorReadings.js";
 import mlRouter from "./ml.js";
 import hardwareRouter from "./hardware.js";
 import factoryUnitsRouter from "./factoryUnits.js";
+import factoryProfileRouter from "./factoryProfile.js";
 
 const router: IRouter = Router();
 
@@ -26,5 +27,6 @@ router.use("/sensor-readings", sensorReadingsRouter);
 router.use("/ml", mlRouter);
 router.use("/hardware", hardwareRouter);
 router.use("/factory-units", factoryUnitsRouter);
+router.use("/factory-profile", factoryProfileRouter);
 
 export default router;
