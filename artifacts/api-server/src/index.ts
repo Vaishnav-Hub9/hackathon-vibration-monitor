@@ -1,4 +1,6 @@
 import http from 'http';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import mongoose from 'mongoose';
 import { Server } from 'socket.io';
 import dotenv from 'dotenv';
@@ -9,6 +11,9 @@ import { sensorSimulator } from './simulator/SensorSimulator.js';
 import { hardwareSimulator } from './simulator/HardwareSimulator.js';
 
 dotenv.config();
+// Also load .env.local from project root (used by freebuff-env)
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.resolve(__dirname, '..', '..', '..', '.env.local') });
 
 const rawPort = process.env["PORT"] || "5000";
 const port = Number(rawPort);
