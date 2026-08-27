@@ -1,0 +1,96 @@
+{
+  "systemSetup": [
+    {
+      "name": "Install pnpm",
+      "command": "npm i -g pnpm@10"
+    }
+  ],
+  "templateName": "custom",
+  "projectDependencies": [
+    {
+      "name": "Install Workspace Dependencies",
+      "command": "pnpm install --frozen-lockfile"
+    },
+    {
+      "name": "Install ML Dependencies",
+      "command": "python3 -m venv --without-pip artifacts/api-server/src/ml/.venv && curl -fsSL https://bootstrap.pypa.io/get-pip.py | artifacts/api-server/src/ml/.venv/bin/python - && artifacts/api-server/src/ml/.venv/bin/python -m pip install -r artifacts/api-server/src/ml/requirements.txt"
+    },
+    {
+      "name": "Install Hardware Dependencies",
+      "command": "python3 -m venv --without-pip hardware/.venv && curl -fsSL https://bootstrap.pypa.io/get-pip.py | hardware/.venv/bin/python - && hardware/.venv/bin/python -m pip install -r hardware/requirements.txt"
+    },
+    {
+      "name": "Generate Mockup Index",
+      "command": "PORT=5174 BASE_PATH=/ pnpm --filter @workspace/mockup-sandbox run build"
+    }
+  ],
+  "codeChecks": [
+    {
+      "name": "Type Check",
+      "command": "pnpm run typecheck"
+    },
+    {
+      "name": "Check ML Python",
+      "command": "artifacts/api-server/src/ml/.venv/bin/python -m compileall -q artifacts/api-server/src/ml"
+    },
+    {
+      "name": "Check Hardware Python",
+      "command": "hardware/.venv/bin/python -m py_compile hardware/main.py"
+    }
+  ],
+  "buildSteps": [
+    {
+      "name": "Build Workspace",
+      "command": "PORT=5174 BASE_PATH=/ pnpm run build"
+    }
+  ],
+  "runStep": [
+    {
+      "name": "Run Full Stack",
+      "command": "PORT=32123 bash scripts/dev-all.sh",
+      "port": "32123"
+    }
+  ],
+  "deploySteps": [],
+  "cleanupFiles": [
+    "node_modules",
+    "artifacts/api-server/node_modules",
+    "artifacts/mockup-sandbox/node_modules",
+    "artifacts/smartbearing/node_modules",
+    "lib/api-client-react/node_modules",
+    "lib/api-spec/node_modules",
+    "lib/api-zod/node_modules",
+    "lib/db/node_modules",
+    "scripts/node_modules",
+    "artifacts/api-server/dist",
+    "artifacts/mockup-sandbox/dist",
+    "artifacts/smartbearing/dist",
+    "artifacts/api-server/.tsbuildinfo",
+    "artifacts/mockup-sandbox/.tsbuildinfo",
+    "artifacts/smartbearing/.tsbuildinfo",
+    "artifacts/mockup-sandbox/src/.generated/mockup-components.ts",
+    "artifacts/api-server/src/ml/.venv",
+    "hardware/.venv",
+    "artifacts/api-server/src/ml/__pycache__",
+    "hardware/__pycache__"
+  ],
+  "packageManager": "pnpm",
+  "envPaths": [
+    {
+      "name": "default",
+      "path": ".env"
+    },
+    {
+      "name": "API Server",
+      "path": "artifacts/api-server/.env"
+    },
+    {
+      "name": "ML Server",
+      "path": "artifacts/api-server/src/ml/.env"
+    },
+    {
+      "name": "SmartBearing Dashboard",
+      "path": "artifacts/smartbearing/.env"
+    }
+  ]
+}
