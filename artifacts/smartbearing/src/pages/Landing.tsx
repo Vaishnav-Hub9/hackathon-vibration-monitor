@@ -4,7 +4,7 @@ import { Link } from 'wouter';
 import {
   Activity, ArrowRight, CheckCircle2, ShieldAlert, Cpu, Zap, MessageCircle,
   Wifi, Gauge, Thermometer, Waves, ChevronDown,
-  Menu, Globe, BarChart3, Shield, Clock, Sparkles, X
+  Menu, Globe, BarChart3, Shield, Clock, Sparkles, X, Box
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import BearingModel from '@/components/landing/BearingModel';
@@ -237,6 +237,11 @@ export default function Landing() {
               <Button variant="outline" onClick={() => scrollToId('how')} className="border-white/10 text-white/60 hover:text-white hover:bg-white/5 h-12 px-8 text-base rounded-xl bg-transparent">
                 See How It Works
               </Button>
+              <Link href="/twin/bench">
+                <Button variant="outline" className="border-amber/30 text-amber hover:bg-amber/10 hover:text-amber h-12 px-6 text-base rounded-xl bg-transparent">
+                  <Box className="w-4 h-4 mr-2" /> Open Live 3D Twin
+                </Button>
+              </Link>
             </div>
 
             <div className="flex flex-wrap items-center gap-5 text-sm text-white/30">

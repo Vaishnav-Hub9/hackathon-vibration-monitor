@@ -165,7 +165,7 @@ export interface MechanicalParams {
 }
 
 export const DEFAULT_MECHANICAL_PARAMS: MechanicalParams = {
-  spindleRunning: false,
+  spindleRunning: true,
   spindleRPM: 3000,
   spindleLoad: 0.01,
   bearingFriction: 0.002,

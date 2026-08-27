@@ -15,15 +15,17 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'wouter';
+import { AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft, Layers, Terminal, Flame, Cable,
   Maximize2, Minimize2, Box, Cpu, Settings, Disc3, Gauge,
+  Camera, Eye, SlidersHorizontal, RotateCw,
 } from 'lucide-react';
 import { engine } from '@/simulation/engineRef';
 import { useDigitalTwinStore, type ActiveView, type CircuitTabId, type MechanicalTabId } from '@/simulation/store';
 import { useLiveTelemetry } from '@/simulation/useLiveTelemetry';
 import BenchScene from '@/components/digitaltwin-bench/BenchScene';
-import MechanicalScene from '@/components/digitaltwin-bench/MechanicalScene';
+import MechanicalScene, { type MechanicalCameraPreset } from '@/components/digitaltwin-bench/MechanicalScene';
 import SimControls from '@/components/digitaltwin-bench/SimControls';
 import MechanicalControls from '@/components/digitaltwin-bench/MechanicalControls';
 import SerialMonitor from '@/components/digitaltwin-bench/SerialMonitor';
@@ -33,6 +35,7 @@ import MechBearingPanel from '@/components/digitaltwin-bench/MechBearingPanel';
 import MechThermalPanel from '@/components/digitaltwin-bench/MechThermalPanel';
 import WiringDiagram from '@/components/digitaltwin-bench/WiringDiagram';
 import ComponentInspector from '@/components/digitaltwin-bench/ComponentInspector';
+import MechanicalQuickControls from '@/components/digitaltwin-bench/MechanicalQuickControls';
 
 // ── Tab definitions ──
 
@@ -46,6 +49,14 @@ const MECH_TABS: { id: MechanicalTabId; label: string; icon: typeof Layers }[] =
   { id: 'telemetry', label: 'Telemetry', icon: Gauge },
   { id: 'bearing', label: 'Bearing', icon: Disc3 },
   { id: 'thermal', label: 'Thermal', icon: Flame },
+];
+
+const CAMERA_VIEWS: { id: MechanicalCameraPreset; label: string; hint: string }[] = [
+  { id: 'overview', label: 'Overview', hint: 'Full assembly' },
+  { id: 'front', label: 'Front', hint: 'Cotton path' },
+  { id: 'top', label: 'Top', hint: 'Drive alignment' },
+  { id: 'bearing', label: 'Bearing', hint: 'Contact zone' },
+  { id: 'drive', label: 'Drive', hint: 'Motor coupling' },
 ];
 
 
@@ -140,7 +151,9 @@ function CircuitPrototypeView({ expanded, setExpanded }: { expanded: boolean; se
 function MechanicalTwinView({ expanded, setExpanded }: { expanded: boolean; setExpanded: (v: boolean) => void }) {
   const mechTab = useDigitalTwinStore((s) => s.mechTab);
   const setMechTab = useDigitalTwinStore((s) => s.setMechTab);
-  const mechParams = useDigitalTwinStore((s) => s.mechParams);
+  const [cameraPreset, setCameraPreset] = useState<MechanicalCameraPreset>('overview');
+  const [autoRotate, setAutoRotate] = useState(false);
+  const [quickControlsOpen, setQuickControlsOpen] = useState(false);
   const { spindleRPM, bearingTemp, isRunning } = useMechanicalTelemetryLive();
 
   return (
@@ -182,7 +195,13 @@ function MechanicalTwinView({ expanded, setExpanded }: { expanded: boolean; setE
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_45%,rgba(245,158,11,0.08),transparent_60%)]" />
           <div className="absolute inset-0 grid-bg opacity-20" />
 
-          <MechanicalScene />
+          <MechanicalScene cameraPreset={cameraPreset} autoRotate={autoRotate} />
+
+          <AnimatePresence>
+            {quickControlsOpen && (
+              <MechanicalQuickControls onClose={() => setQuickControlsOpen(false)} />
+            )}
+          </AnimatePresence>
 
           <div className="absolute bottom-3 left-3 z-20 flex items-center gap-2 text-[10px] font-mono-data text-slate-400 bg-[#0F1629]/80 border border-navy rounded-md px-2.5 py-1.5">
             <Box className="w-3 h-3 text-amber" /> Drag to orbit · Scroll to zoom
@@ -215,11 +234,72 @@ function MechanicalTwinView({ expanded, setExpanded }: { expanded: boolean; setE
               {bearingTemp.toFixed(1)}°C
             </span>
           </div>
+
+          {/* Camera and quick controls */}
+          <div className="absolute top-14 right-3 z-30 w-[min(470px,calc(100%-1.5rem))] rounded-xl border border-navy bg-[#0F1629]/90 p-2.5 shadow-xl backdrop-blur-xl">
+            <div className="mb-2 flex items-center justify-between gap-2 px-1">
+              <div className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-widest text-slate-500">
+                <Camera className="w-3.5 h-3.5 text-amber" /> Camera angle
+              </div>
+              <span className="font-mono-data text-[9px] uppercase tracking-widest text-slate-600">{cameraPreset}</span>
+            </div>
+            <div className="grid grid-cols-5 gap-1.5">
+              {CAMERA_VIEWS.map((view) => {
+                const active = cameraPreset === view.id;
+                return (
+                  <button
+                    key={view.id}
+                    onClick={() => setCameraPreset(view.id)}
+                    title={view.hint}
+                    className={`rounded-lg border px-1.5 py-2 text-[9px] font-bold transition ${
+                      active
+                        ? 'border-amber/45 bg-amber/15 text-amber shadow-[0_0_16px_rgba(245,158,11,0.12)]'
+                        : 'border-navy bg-[#0A0E1A]/60 text-slate-500 hover:border-amber/25 hover:text-slate-200'
+                    }`}
+                  >
+                    {view.label}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="mt-2 flex gap-1.5 border-t border-navy pt-2">
+              <button
+                onClick={() => setAutoRotate((value) => !value)}
+                className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg border px-2 py-1.5 text-[9px] font-bold uppercase tracking-wider transition ${
+                  autoRotate
+                    ? 'border-sky-400/30 bg-sky-400/10 text-sky-300'
+                    : 'border-navy bg-[#0A0E1A]/60 text-slate-500 hover:text-slate-200'
+                }`}
+              >
+                <RotateCw className={`w-3.5 h-3.5 ${autoRotate ? 'animate-spin' : ''}`} />
+                {autoRotate ? 'Auto orbit on' : 'Auto orbit'}
+              </button>
+              <button
+                onClick={() => setQuickControlsOpen((value) => !value)}
+                className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg border px-2 py-1.5 text-[9px] font-bold uppercase tracking-wider transition ${
+                  quickControlsOpen
+                    ? 'border-amber/40 bg-amber/10 text-amber'
+                    : 'border-navy bg-[#0A0E1A]/60 text-slate-500 hover:text-slate-200'
+                }`}
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5" /> Quick controls
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Side panel */}
         <aside className="border-t lg:border-t-0 lg:border-l border-navy bg-[#0A0E1A] overflow-y-auto">
           <div className="p-4 space-y-4">
+            <div className="flex items-center justify-between border-b border-navy pb-3">
+              <div>
+                <div className="text-[9px] uppercase tracking-[0.2em] text-amber">Operator console</div>
+                <div className="mt-1 text-sm font-bold text-white">Mechanical telemetry</div>
+              </div>
+              <div className="flex items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-emerald-400">
+                <Eye className="w-3 h-3" /> Live
+              </div>
+            </div>
             {mechTab === 'telemetry' && <MechanicalTelemetry />}
             {mechTab === 'bearing' && <MechBearingPanel />}
             {mechTab === 'thermal' && <MechThermalPanel />}

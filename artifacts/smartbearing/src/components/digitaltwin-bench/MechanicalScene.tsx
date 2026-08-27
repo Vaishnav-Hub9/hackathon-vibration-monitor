@@ -10,13 +10,26 @@
  *   - Cotton thread feeding from supply to spindle
  *   - Static labels on the base plate (not on rotating parts)
  */
-import { useRef, useMemo } from 'react';
+import { useRef, useMemo, useEffect, type RefObject } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, ContactShadows, Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { engine } from '@/simulation/engineRef';
 import { useDigitalTwinStore } from '@/simulation/store';
+
+export type MechanicalCameraPreset = 'overview' | 'front' | 'top' | 'bearing' | 'drive';
+
+export const MECHANICAL_CAMERA_PRESETS: Record<MechanicalCameraPreset, {
+  position: [number, number, number];
+  target: [number, number, number];
+}> = {
+  overview: { position: [4.2, 2.8, 6.8], target: [0, -0.45, 0] },
+  front: { position: [0.35, 1.25, 7.2], target: [0, -0.45, 0] },
+  top: { position: [4.6, 6.4, 3.7], target: [0, -0.55, 0] },
+  bearing: { position: [2.35, -0.15, 2.8], target: [0, -0.55, 0] },
+  drive: { position: [6.7, 1.45, 1.1], target: [0.55, -0.8, 0] },
+};
 
 // ── Static Label (only on non-rotating parts) ───────────────────────────────
 
@@ -47,8 +60,10 @@ function StaticLabel({ text, color = '#F59E0B', sub, position }: {
 
 // ── Cotton Thread (animated from supply roll to spindle) ─────────────────────
 
-function CottonThread({ rotationRef }: { rotationRef: React.RefObject<THREE.Group | null> }) {
+function CottonThread() {
   const threadMatRef = useRef<THREE.MeshStandardMaterial>(null);
+  const supplyRef = useRef<THREE.Group>(null);
+  const guideRef = useRef<THREE.Group>(null);
 
   const threadGeometry = useMemo(() => {
     const curve = new THREE.CatmullRomCurve3([
@@ -61,9 +76,12 @@ function CottonThread({ rotationRef }: { rotationRef: React.RefObject<THREE.Grou
     return new THREE.TubeGeometry(curve, 20, 0.008, 6, false);
   }, []);
 
-  useFrame(() => {
-    if (!threadMatRef.current) return;
+  useFrame((_, delta) => {
     const snap = engine.getMechanicalSnapshot();
+    const rotationRate = snap.spindleRPM > 0 ? (snap.spindleRPM / 60) * Math.PI * 2 : 0;
+    if (supplyRef.current) supplyRef.current.rotation.y += rotationRate * delta * 0.14;
+    if (guideRef.current) guideRef.current.rotation.z += rotationRate * delta * 0.24;
+    if (!threadMatRef.current) return;
     const pulse = snap.isRunning ? 0.8 + Math.sin(Date.now() * 0.005) * 0.15 : 0.5;
     threadMatRef.current.opacity = pulse;
   });
@@ -83,7 +101,7 @@ function CottonThread({ rotationRef }: { rotationRef: React.RefObject<THREE.Grou
       </mesh>
 
       {/* Supply roll of cotton */}
-      <group position={[-0.8, 0.5, 1.8]}>
+      <group ref={supplyRef} position={[-0.8, 0.5, 1.8]}>
         <mesh rotation={[0, 0, Math.PI / 2]}>
           <cylinderGeometry args={[0.25, 0.25, 0.15, 24]} />
           <meshStandardMaterial color="#f5f0e0" roughness={0.85} metalness={0} />
@@ -95,7 +113,7 @@ function CottonThread({ rotationRef }: { rotationRef: React.RefObject<THREE.Grou
       </group>
 
       {/* Guide pulley */}
-      <group position={[-0.5, 0.9, 1.2]}>
+      <group ref={guideRef} position={[-0.5, 0.9, 1.2]}>
         <mesh rotation={[Math.PI / 2, 0, 0]}>
           <torusGeometry args={[0.06, 0.015, 8, 16]} />
           <meshStandardMaterial color="#9CA3AF" roughness={0.2} metalness={0.9} />
@@ -215,10 +233,7 @@ function BallBearing({ rotationRef }: { rotationRef: React.RefObject<THREE.Group
 
 // ── Cotton Spindle ──────────────────────────────────────────────────────────
 
-function CottonSpindle({ rotationRef }: { rotationRef: React.RefObject<THREE.Group | null> }) {
-  const bodyRef = useRef<THREE.Mesh>(null);
-  const yarnLayersRef = useRef<THREE.Group>(null);
-
+function CottonSpindle() {
   const yarnLayers = useMemo(() => {
     return Array.from({ length: 8 }, (_, i) => ({
       y: 0.25 + i * 0.08,
@@ -227,16 +242,22 @@ function CottonSpindle({ rotationRef }: { rotationRef: React.RefObject<THREE.Gro
     }));
   }, []);
 
-  useFrame(() => {
-    if (!rotationRef.current || !bodyRef.current) return;
-    bodyRef.current.rotation.y = rotationRef.current.rotation.y;
-    if (yarnLayersRef.current) {
-      yarnLayersRef.current.rotation.y = rotationRef.current.rotation.y;
-    }
-  });
+  const yarnWrap = useMemo(() => {
+    const points = Array.from({ length: 96 }, (_, i) => {
+      const progress = i / 95;
+      const angle = progress * Math.PI * 2 * 3.5;
+      const radius = THREE.MathUtils.lerp(0.14, 0.052, progress);
+      return new THREE.Vector3(
+        Math.cos(angle) * radius,
+        0.18 + progress * 0.94,
+        Math.sin(angle) * radius,
+      );
+    });
+    return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points), 96, 0.011, 6, false);
+  }, []);
 
   return (
-    <group ref={bodyRef}>
+    <group>
       <mesh position={[0, 0.6, 0]}>
         <cylinderGeometry args={[0.04, 0.12, 0.9, 24]} />
         <meshStandardMaterial color="#d4c4a8" roughness={0.7} metalness={0.1} />
@@ -249,7 +270,7 @@ function CottonSpindle({ rotationRef }: { rotationRef: React.RefObject<THREE.Gro
         <cylinderGeometry args={[0.15, 0.15, 0.08, 24]} />
         <meshStandardMaterial color="#8a7a62" roughness={0.5} metalness={0.3} />
       </mesh>
-      <group ref={yarnLayersRef}>
+      <group>
         {yarnLayers.map((layer, i) => (
           <mesh key={i} position={[0, layer.y, 0]}>
             <cylinderGeometry args={[layer.radiusTop, layer.radiusBottom, 0.06, 20]} />
@@ -262,6 +283,9 @@ function CottonSpindle({ rotationRef }: { rotationRef: React.RefObject<THREE.Gro
             />
           </mesh>
         ))}
+        <mesh geometry={yarnWrap}>
+          <meshStandardMaterial color="#fff7df" roughness={0.8} metalness={0} emissive="#b9a77e" emissiveIntensity={0.08} />
+        </mesh>
       </group>
       <mesh position={[0, 1.15, 0]} rotation={[Math.PI / 2, 0, 0]}>
         <torusGeometry args={[0.03, 0.005, 8, 16]} />
@@ -359,18 +383,86 @@ function BasePlate() {
   );
 }
 
+// ── Camera Director ──────────────────────────────────────────────────────────
+
+function CameraDirector({
+  preset,
+  controlsRef,
+}: {
+  preset: MechanicalCameraPreset;
+  controlsRef: RefObject<any>;
+}) {
+  const destination = useRef<{ position: THREE.Vector3; target: THREE.Vector3 } | null>(null);
+  const settling = useRef(false);
+  const wiredControls = useRef<any>(null);
+
+  const cancelSettle = () => {
+    settling.current = false;
+  };
+
+  useEffect(() => {
+    const pose = MECHANICAL_CAMERA_PRESETS[preset];
+    destination.current = {
+      position: new THREE.Vector3(...pose.position),
+      target: new THREE.Vector3(...pose.target),
+    };
+    settling.current = true;
+  }, [preset]);
+
+  useEffect(() => () => {
+    wiredControls.current?.removeEventListener?.('start', cancelSettle);
+  }, []);
+
+  useFrame((_, delta) => {
+    const controls = controlsRef.current;
+    if (!controls) return;
+
+    if (wiredControls.current !== controls) {
+      wiredControls.current?.removeEventListener?.('start', cancelSettle);
+      controls.addEventListener?.('start', cancelSettle);
+      wiredControls.current = controls;
+    }
+
+    if (!settling.current || !destination.current) return;
+    const smoothing = 1 - Math.pow(0.001, delta);
+    const camera = controls.object as THREE.Camera;
+    camera.position.lerp(destination.current.position, smoothing);
+    controls.target.lerp(destination.current.target, smoothing);
+    controls.update();
+
+    if (
+      camera.position.distanceTo(destination.current.position) < 0.025 &&
+      controls.target.distanceTo(destination.current.target) < 0.025
+    ) {
+      camera.position.copy(destination.current.position);
+      controls.target.copy(destination.current.target);
+      settling.current = false;
+      controls.update();
+    }
+  });
+
+  return null;
+}
+
 // ── Scene Content ───────────────────────────────────────────────────────────
 
-function SceneContent() {
+function SceneContent({
+  cameraPreset,
+  autoRotate,
+}: {
+  cameraPreset: MechanicalCameraPreset;
+  autoRotate: boolean;
+}) {
   const rotationRef = useRef<THREE.Group>(null);
   const wobbleRef = useRef<THREE.Group>(null);
+  const controlsRef = useRef<any>(null);
 
-  useFrame(() => {
+  useFrame((_, delta) => {
     if (!rotationRef.current || !wobbleRef.current) return;
 
     const snap = engine.getMechanicalSnapshot();
     const rotSpeed = (snap.spindleRPM / 60) * Math.PI * 2;
-    rotationRef.current.rotation.y += rotSpeed * 0.016;
+    rotationRef.current.rotation.y += rotSpeed * delta;
 
     const wobble = snap.shaftWobble * 0.02;
     wobbleRef.current.position.x = Math.sin(rotationRef.current.rotation.y * 3.7) * wobble;
@@ -388,7 +480,7 @@ function SceneContent() {
 
       <group ref={wobbleRef}>
         <group ref={rotationRef} position={[0, 0, 0]}>
-          <CottonSpindle rotationRef={rotationRef} />
+           <CottonSpindle />
           <DriveShaft rotationRef={rotationRef} />
           <group position={[0, -0.3, 0]}>
             <BallBearing rotationRef={rotationRef} />
@@ -397,7 +489,7 @@ function SceneContent() {
         </group>
       </group>
 
-      <CottonThread rotationRef={rotationRef} />
+       <CottonThread />
       <SmartBearingDevice />
       <BasePlate />
 
@@ -408,11 +500,16 @@ function SceneContent() {
         <meshStandardMaterial color="#8B7355" roughness={0.7} metalness={0.05} />
       </mesh>
 
+      <CameraDirector preset={cameraPreset} controlsRef={controlsRef} />
+
       <OrbitControls
+        ref={controlsRef}
         enablePan
         minDistance={2}
         maxDistance={15}
-        autoRotate
+        enableDamping
+        dampingFactor={0.08}
+        autoRotate={autoRotate}
         autoRotateSpeed={0.2}
         target={[0, -0.5, 0]}
       />
@@ -422,14 +519,20 @@ function SceneContent() {
 
 // ── Main Component ──────────────────────────────────────────────────────────
 
-export default function MechanicalScene() {
+export default function MechanicalScene({
+  cameraPreset = 'overview',
+  autoRotate = false,
+}: {
+  cameraPreset?: MechanicalCameraPreset;
+  autoRotate?: boolean;
+}) {
   return (
     <Canvas
-      camera={{ position: [3, 2, 5], fov: 40 }}
+      camera={{ position: MECHANICAL_CAMERA_PRESETS.overview.position, fov: 40 }}
       gl={{ antialias: true, preserveDrawingBuffer: true }}
       style={{ background: '#0a0e1a', width: '100%', height: '100%' }}
     >
-      <SceneContent />
+      <SceneContent cameraPreset={cameraPreset} autoRotate={autoRotate} />
     </Canvas>
   );
 }
