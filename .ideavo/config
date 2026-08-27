@@ -1,0 +1,90 @@
+{
+  "systemSetup": [
+    {
+      "name": "Install pnpm",
+      "command": "npm i -g pnpm"
+    }
+  ],
+  "templateName": "custom",
+  "projectDependencies": [
+    {
+      "name": "Install Dependencies",
+      "command": "pnpm install"
+    },
+    {
+      "name": "Install ML Dependencies",
+      "command": "python3 -m pip install -r artifacts/api-server/src/ml/requirements.txt"
+    },
+    {
+      "name": "Seed Database",
+      "command": "pnpm --filter @workspace/api-server run seed"
+    }
+  ],
+  "codeChecks": [
+    {
+      "name": "Typecheck",
+      "command": "pnpm run typecheck"
+    }
+  ],
+  "buildSteps": [
+    {
+      "name": "Build Project",
+      "command": "pnpm run build"
+    }
+  ],
+  "runStep": [
+    {
+      "name": "Run Dashboard",
+      "command": "PORT=5173 pnpm --filter @workspace/smartbearing run dev",
+      "port": "5173"
+    },
+    {
+      "name": "Run API Server",
+      "command": "SIMULATOR_AUTO_START=true PORT=5000 pnpm --filter @workspace/api-server run dev",
+      "port": "5000"
+    }
+  ],
+  "deploySteps": [
+    {
+      "name": "Deploy to Render",
+      "command": "render blueprint deploy"
+    }
+  ],
+  "cleanupFiles": [
+    "node_modules",
+    "artifacts/*/node_modules",
+    "lib/*/node_modules",
+    "lib/integrations/*/node_modules",
+    "scripts/node_modules",
+    "artifacts/*/dist",
+    "lib/*/dist",
+    "lib/integrations/*/dist",
+    "scripts/dist",
+    "**/tsconfig.tsbuildinfo",
+    "**/__pycache__",
+    "artifacts/api-server/src/ml/models",
+    "artifacts/mockup-sandbox/src/.generated",
+    "artifacts/api-server/.env",
+    "artifacts/smartbearing/.env",
+    "artifacts/api-server/src/ml/.env"
+  ],
+  "packageManager": "pnpm",
+  "envPaths": [
+    {
+      "name": "default",
+      "path": ".env"
+    },
+    {
+      "name": "api-server",
+      "path": "artifacts/api-server/.env"
+    },
+    {
+      "name": "smartbearing",
+      "path": "artifacts/smartbearing/.env"
+    },
+    {
+      "name": "ml",
+      "path": "artifacts/api-server/src/ml/.env"
+    }
+  ]
+}
