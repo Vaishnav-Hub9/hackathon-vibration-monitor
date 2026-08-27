@@ -1,0 +1,12 @@
+board_manager:
+  additional_urls: []
+daemon:
+  port: "50051"
+directories:
+  data: /Users/sudha/hackathon-vibration-monitor/hardware/.arduino15
+  downloads: /Users/sudha/hackathon-vibration-monitor/hardware/.arduino15/staging
+  user: /Users/sudha/hackathon-vibration-monitor/hardware/.arduino15/user
+library:
+  enable_unsafe_install: false
+logging:
+  level: info
