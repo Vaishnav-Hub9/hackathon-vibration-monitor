@@ -173,8 +173,9 @@ def _healthy_verdict(req: PredictRequest, note: str) -> dict:
 # ---------------------------------------------------------------------------
 # Model training analysis (/analysis)
 #
-# Real diagnostics computed from the ACTUAL trained model on a fresh, held-out
-# validation set synthesized with the same physics recipes as train_model.py:
+# Real diagnostics computed from the ACTUAL trained model on a fresh, shifted
+# validation set. Training uses grouped machine-condition holdout; this set also
+# widens RPM/severity ranges and sensor noise to expose simulator overfitting:
 # confusion matrix, per-class precision/recall/F1, training + validation loss
 # curves, feature scatter data and a PCA projection. Computed once per process
 # and cached — nothing here is hardcoded or random.
@@ -191,9 +192,15 @@ def _compute_analysis():
     import numpy as np
     import train_model  # reuse the physics-based synthesis + dataset builder
 
-    # Held-out validation set: deterministic seed, same class recipes as training.
+    # Domain-shifted validation set: deterministic, but deliberately outside the
+    # narrow training regime. This is more honest than reusing the same recipe.
     train_model.RNG = np.random.default_rng(2024)
-    rows, ys = train_model.build_dataset(per_class=400)  # 6 classes x 400 = 2400
+    rows, ys = train_model.build_dataset(
+        per_class=400,
+        rpm_range=(11000, 18000),
+        severity_range=(0.45, 1.55),
+        noise_scale=1.35,
+    )  # 6 classes x 400 = 2400
     X = train_model.feature_matrix(rows)
     y_enc = encoder.transform(ys)  # label-encode to match the model's classes
 
@@ -262,6 +269,8 @@ def _compute_analysis():
     accuracy = float(model.score(X, y_enc))
     macro_f1 = float(report["macro avg"]["f1-score"])
     weighted_f1 = float(report["weighted avg"]["f1-score"])
+    training_accuracy = float(getattr(model, "training_accuracy_", 0.0))
+    generalization_gap = max(0.0, training_accuracy - accuracy)
 
     # Training metadata: model spec + pickle timestamp (when the model was built)
     model_path = os.path.join(model_dir, "smartline_final.pkl")
@@ -270,7 +279,7 @@ def _compute_analysis():
     return {
         "model": {
             "name": "GradientBoost Fault Predictor (GradientBoostingClassifier)",
-            "architecture": "Gradient boosting — 220 shallow trees (depth 4) over 29 physics features",
+            "architecture": "Regularized gradient boosting with grouped holdout over 29 physics features",
             "trained_at": trained_at.isoformat(),
             "dataset_size": 4200,            # training samples (700/class)
             "validation_size": len(ys),
@@ -278,9 +287,13 @@ def _compute_analysis():
             "accuracy": round(accuracy, 4),
             "f1_macro": round(macro_f1, 4),
             "f1_weighted": round(weighted_f1, 4),
+            "training_accuracy": round(training_accuracy, 4),
+            "generalization_gap": round(generalization_gap, 4),
+            "validation_strategy": getattr(model, "validation_strategy_", "domain-shifted held-out validation"),
+            "overfit_status": "healthy generalization" if generalization_gap <= 0.08 else "monitor generalization gap",
             "train_loss": round(train_loss[-1], 4),
             "validation_loss": round(val_loss[-1], 4),
-            "n_estimators": int(model.n_estimators),
+            "n_estimators": int(getattr(model, "n_estimators_", model.n_estimators)),
             "learning_rate": float(model.learning_rate),
             "max_depth": int(model.max_depth),
             "feature_names": FEATURE_NAMES,

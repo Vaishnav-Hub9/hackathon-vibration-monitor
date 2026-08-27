@@ -6,7 +6,7 @@ import {
 } from 'recharts';
 import {
   Cpu, Calendar, Database, Target, Gauge, TrendingDown,
-  BookOpen, Sigma, Grid3X3, Activity, BrainCircuit, Layers, AlertOctagon
+  BookOpen, Sigma, Grid3X3, Activity, BrainCircuit, Layers, AlertOctagon, ShieldCheck
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { mlApi } from '@/lib/api';
@@ -16,6 +16,7 @@ type MlAnalysisData = {
     name: string; architecture: string; trained_at: string; dataset_size: number;
     validation_size: number; classes: string[]; accuracy: number; f1_macro: number;
     f1_weighted: number; train_loss: number; validation_loss: number;
+    training_accuracy: number; generalization_gap: number; validation_strategy: string; overfit_status: string;
     n_estimators: number; learning_rate: number; max_depth: number; feature_names: string[];
   };
   confusion_matrix: { labels: string[]; matrix: number[][] };
@@ -131,7 +132,8 @@ export default function MlAnalysis() {
                   { icon: Database, label: 'Dataset Size', val: meta.dataset_size.toLocaleString(), sub: `samples · ${meta.validation_size} held-out for this analysis` },
                   { icon: Target, label: 'Accuracy', val: `${(meta.accuracy * 100).toFixed(1)}%`, sub: 'on validation set', color: '#10B981' },
                   { icon: Gauge, label: 'F1 Score (macro)', val: meta.f1_macro.toFixed(3), sub: `weighted ${meta.f1_weighted.toFixed(3)}`, color: '#3B82F6' },
-                  { icon: TrendingDown, label: 'Loss', val: meta.validation_loss.toFixed(3), sub: `train ${meta.train_loss.toFixed(3)}`, color: '#EA580C' },
+                   { icon: TrendingDown, label: 'Loss', val: meta.validation_loss.toFixed(3), sub: `train ${meta.train_loss.toFixed(3)}`, color: '#EA580C' },
+                   { icon: ShieldCheck, label: 'Generalization gap', val: `${(meta.generalization_gap * 100).toFixed(1)} pp`, sub: meta.overfit_status, color: meta.generalization_gap <= 0.08 ? '#10B981' : '#EA580C' },
                   { icon: Layers, label: 'Model Spec', val: `${meta.n_estimators} trees`, sub: `depth ${meta.max_depth} · lr ${meta.learning_rate}` },
                 ].map((m, i) => (
                   <motion.div
@@ -250,8 +252,8 @@ export default function MlAnalysis() {
                   </ResponsiveContainer>
                 </div>
                 <ExplainCard icon={TrendingDown} title="What this shows">
-                  Both curves fall steeply in the first ~50 trees and then plateau together, never diverging — the classic signature of a
-                  stable model that generalizes. If validation had climbed back up while training kept dropping, that would be overfitting.
+                   These curves now come from grouped holdout training and a shifted operating regime. A small, stable gap is expected;
+                   a widening validation curve above training would indicate overfitting and trigger model review.
                 </ExplainCard>
               </div>
 
@@ -279,8 +281,8 @@ export default function MlAnalysis() {
                   </ResponsiveContainer>
                 </div>
                 <ExplainCard icon={Gauge} title="What this shows">
-                  Each fault class scores near 1.0 on all three metrics. Crucially, Healthy stays distinct from every defect mode — the
-                  model never trades false confidence on one class for mistakes on another.
+                   Metrics are reported on the shifted validation set rather than a random row split, so they reflect how the model behaves
+                   when RPM, severity, and sensor noise change in production.
                 </ExplainCard>
               </div>
             </div>
@@ -357,10 +359,11 @@ export default function MlAnalysis() {
             <div className="flex items-start gap-3 bg-[#0A0E1A]/60 border border-navy rounded-xl p-4">
               <BookOpen className="w-4 h-4 text-amber mt-0.5 flex-shrink-0" />
               <p className="text-xs text-slate-400 leading-relaxed">
-                <span className="font-bold text-slate-300">Where this data comes from:</span> the model was trained on 4,200 synthesized
-                vibration windows generated from physical fault signatures (BPFO/BPFI/BSF band recipes — see CONCEPTS.md). This page scores
-                the trained pickles on a fresh 2,400-sample held-out set and computes every number above live: confusion matrix,
-                classification report, per-iteration deviance curves, feature scatter and PCA. No values are hardcoded.
+                 <span className="font-bold text-slate-300">Where this data comes from:</span> the model was trained on 4,200 synthesized
+                 vibration windows generated from physical fault signatures (BPFO/BPFI/BSF band recipes — see CONCEPTS.md). Training uses
+                 grouped machine-condition holdout, regularization, subsampling, and early stopping. This page scores the trained pickles on
+                 a fresh 2,400-sample domain-shifted set and computes every number above live: confusion matrix, classification report,
+                 per-iteration deviance curves, feature scatter and PCA.
               </p>
             </div>
           </>

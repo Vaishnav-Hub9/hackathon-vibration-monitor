@@ -19,7 +19,7 @@ Runs with only: numpy, scipy, scikit-learn, joblib.
 """
 import numpy as np
 from sklearn.ensemble import GradientBoostingClassifier
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import GroupShuffleSplit
 from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import classification_report
 import joblib
@@ -37,16 +37,20 @@ SAMPLE_RATE = 4000.0
 RNG = np.random.default_rng(42)
 
 
-def synthesize(label, rpm, severity=1.0):
+def synthesize(label, rpm, severity=1.0, noise_scale=1.0, sensor_gain=1.0):
     """Build one 2048-sample vibration window for a fault class."""
     df = compute_defect_frequencies(rpm)
     t = np.arange(N_SAMPLES) / SAMPLE_RATE
     fr = df["fr"]
 
-    sig = RNG.normal(0, 0.05, N_SAMPLES)  # broadband noise floor
+    # Vary sensor noise, gain, phase, detuning, and low-frequency drift so the
+    # classifier cannot memorize one clean simulator signature.
+    sig = RNG.normal(0, 0.05 * noise_scale, N_SAMPLES)
+    sig += 0.015 * noise_scale * np.sin(2 * np.pi * RNG.uniform(0.2, 1.2) * t + RNG.uniform(0, 2 * np.pi))
 
     def tone(freq, amp):
-        return amp * np.sin(2 * np.pi * freq * t + RNG.uniform(0, 2 * np.pi))
+        detuned = freq * (1 + RNG.normal(0, 0.0025))
+        return amp * np.sin(2 * np.pi * detuned * t + RNG.uniform(0, 2 * np.pi))
 
     # Every machine has a small 1x fundamental (rotor)
     sig += tone(fr, 0.35 * severity)
@@ -75,42 +79,82 @@ def synthesize(label, rpm, severity=1.0):
     else:
         raise ValueError(f"Unknown label {label}")
 
-    return sig
+    return sig * sensor_gain
 
 
-def build_dataset(per_class=700):
+def build_dataset(per_class=700, rpm_range=(13500, 16500), severity_range=(0.7, 1.3), noise_scale=1.0):
     rows, ys = [], []
     for label in CLASSES:
         for _ in range(per_class):
-            rpm = float(RNG.integers(13500, 16500))  # ~14-16k RPM spindles
-            severity = float(RNG.uniform(0.7, 1.3))
-            sig = synthesize(label, rpm, severity)
+            rpm = float(RNG.integers(rpm_range[0], rpm_range[1]))
+            severity = float(RNG.uniform(severity_range[0], severity_range[1]))
+            gain = float(RNG.uniform(0.85, 1.15))
+            sig = synthesize(label, rpm, severity, noise_scale=noise_scale * RNG.uniform(0.9, 1.1), sensor_gain=gain)
             feats = extract_features(sig, sample_rate=SAMPLE_RATE, rpm=rpm)
             rows.append(feats)
             ys.append(label)
     return rows, np.array(ys)
 
 
+def build_grouped_dataset(per_class=700, group_size=7):
+    """Build windows in machine-condition groups for leakage-free holdout."""
+    rows, ys, groups = [], [], []
+    for label in CLASSES:
+        group_count = int(np.ceil(per_class / group_size))
+        for group_index in range(group_count):
+            rpm = float(RNG.integers(13500, 16500))
+            severity = float(RNG.uniform(0.7, 1.3))
+            gain = float(RNG.uniform(0.85, 1.15))
+            for _ in range(min(group_size, per_class - group_index * group_size)):
+                sig = synthesize(
+                    label,
+                    rpm,
+                    severity * RNG.uniform(0.96, 1.04),
+                    noise_scale=RNG.uniform(0.9, 1.2),
+                    sensor_gain=gain * RNG.uniform(0.98, 1.02),
+                )
+                rows.append(extract_features(sig, sample_rate=SAMPLE_RATE, rpm=rpm))
+                ys.append(label)
+                groups.append(f"{label}-{group_index}")
+    return rows, np.array(ys), np.array(groups)
+
+
 def main():
-    rows, y = build_dataset()
+    rows, y, groups = build_grouped_dataset()
     X = feature_matrix(rows)
     le = LabelEncoder()
     y_enc = le.fit_transform(y)
 
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y_enc, test_size=0.25, random_state=7, stratify=y_enc
-    )
+    # Keep every machine-condition group together. Random row splitting lets
+    # near-identical windows leak between train and validation and inflates
+    # scores for synthetic datasets.
+    splitter = GroupShuffleSplit(n_splits=1, test_size=0.25, random_state=7)
+    train_idx, test_idx = next(splitter.split(X, y_enc, groups=groups))
+    X_train, X_test = X[train_idx], X[test_idx]
+    y_train, y_test = y_enc[train_idx], y_enc[test_idx]
 
     clf = GradientBoostingClassifier(
-        n_estimators=220,
-        learning_rate=0.08,
-        max_depth=4,
+        n_estimators=180,
+        learning_rate=0.05,
+        max_depth=2,
+        min_samples_leaf=8,
+        subsample=0.8,
+        max_features='sqrt',
+        n_iter_no_change=15,
+        validation_fraction=0.15,
+        tol=1e-4,
         random_state=7,
     )
     clf.fit(X_train, y_train)
 
     acc = clf.score(X_test, y_test)
+    train_acc = clf.score(X_train, y_train)
+    clf.training_accuracy_ = float(train_acc)
+    clf.validation_accuracy_ = float(acc)
+    clf.validation_strategy_ = 'grouped machine-condition holdout'
+    clf.generalization_gap_ = float(train_acc - acc)
     print(f"Test accuracy: {acc:.3f}")
+    print(f"Train accuracy: {train_acc:.3f}")
     print(
         classification_report(
             y_test,
