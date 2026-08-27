@@ -17,7 +17,7 @@ export default function Register() {
     if (formData.password !== formData.confirm) { setError('Passwords do not match'); return; }
     setLoading(true);
     try {
-      const res = await authApi.register({ name: formData.name, email: formData.email, password: formData.password, role: 'operator', alertEmail: formData.alertEmail });
+      const res = await authApi.register({ name: formData.name, email: formData.email, password: formData.password, role: 'worker', alertEmail: formData.alertEmail });
       const { token, user } = res.data.data;
       localStorage.setItem('token', token);
       localStorage.setItem('user', JSON.stringify(user));
@@ -46,6 +46,7 @@ export default function Register() {
           <div className="text-center mb-8">
             <h1 className="text-xl font-bold mb-2">Register Factory</h1>
             <p className="text-white/40 text-sm">Create an account to monitor your MSME setup</p>
+            <p className="text-blue-300/60 text-[11px] mt-2">New accounts start with worker access. An administrator assigns factory roles and scope.</p>
           </div>
 
           {error && (

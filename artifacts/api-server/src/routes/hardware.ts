@@ -9,6 +9,7 @@ import { getPreventionTips } from "../lib/prevention.js";
 import { notifyMailAlert } from "../lib/mail.js";
 import { notifyWhatsAppAlert, isWhatsAppConfigured } from "../lib/whatsapp.js";
 import { hardwareSimulator } from "../simulator/HardwareSimulator.js";
+import { authenticateJWT, requireRoles } from "../middleware/auth.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HARDWARE LAB — Arduino rig ingestion
@@ -365,7 +366,7 @@ router.post("/ingest", (req: Request, res: Response): void => {
 // thermometer read by hand when the serial bridge isn't running). Flows through
 // the exact same normalise → broadcast path as Arduino frames.
 // ─────────────────────────────────────────────────────────────────────────────
-router.post("/manual", (req: Request, res: Response): void => {
+router.post("/manual", authenticateJWT, requireRoles('maintenance_engineer', 'admin', 'factory_manager', 'worker', 'operator'), (req: Request, res: Response): void => {
   try {
     const keyError = requireIngestKey(req);
     if (keyError) {
@@ -402,12 +403,12 @@ router.post("/manual", (req: Request, res: Response): void => {
 // stop the built-in demo stream so the page shows ONLY real Arduino readings
 // (no alternating source, no mixed chart). Start re-enables demo mode.
 // ─────────────────────────────────────────────────────────────────────────────
-router.post("/simulator/stop", (_req: Request, res: Response): void => {
+router.post("/simulator/stop", authenticateJWT, requireRoles('maintenance_engineer', 'admin'), (_req: Request, res: Response): void => {
   hardwareSimulator.stop();
   res.json({ success: true, data: { running: false } });
 });
 
-router.post("/simulator/start", (_req: Request, res: Response): void => {
+router.post("/simulator/start", authenticateJWT, requireRoles('maintenance_engineer', 'admin'), (_req: Request, res: Response): void => {
   hardwareSimulator.start();
   res.json({ success: true, data: { running: true } });
 });
@@ -415,7 +416,7 @@ router.post("/simulator/start", (_req: Request, res: Response): void => {
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/hardware/stream — recent ring buffer + live status (for page mount).
 // ─────────────────────────────────────────────────────────────────────────────
-router.get("/stream", (_req: Request, res: Response): void => {
+router.get("/stream", authenticateJWT, (_req: Request, res: Response): void => {
   res.json({
     success: true,
     data: {

@@ -1,11 +1,11 @@
 import { Router, Request, Response } from 'express';
-import { authenticateJWT } from '../middleware/auth.js';
+import { authenticateJWT, requireRoles } from '../middleware/auth.js';
 import { sensorSimulator } from '../simulator/SensorSimulator.js';
 
 const router = Router();
 router.use(authenticateJWT);
 
-router.post('/start', (req: Request, res: Response) => {
+router.post('/start', requireRoles('maintenance_engineer', 'admin'), (req: Request, res: Response) => {
   try {
     sensorSimulator.start();
     res.json({ success: true, data: { status: 'Simulator started' } });
@@ -14,7 +14,7 @@ router.post('/start', (req: Request, res: Response) => {
   }
 });
 
-router.post('/stop', (req: Request, res: Response) => {
+router.post('/stop', requireRoles('maintenance_engineer', 'admin'), (req: Request, res: Response) => {
   try {
     sensorSimulator.stop();
     res.json({ success: true, data: { status: 'Simulator stopped' } });
@@ -23,7 +23,7 @@ router.post('/stop', (req: Request, res: Response) => {
   }
 });
 
-router.post('/inject-fault', (req: Request, res: Response) => {
+router.post('/inject-fault', requireRoles('maintenance_engineer', 'admin'), (req: Request, res: Response) => {
   try {
     const { machineId, faultType } = req.body;
     if (!machineId) {

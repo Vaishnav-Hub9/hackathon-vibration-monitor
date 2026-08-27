@@ -2,15 +2,28 @@ import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { User } from '../models/User.js';
-import { authenticateJWT, AuthRequest } from '../middleware/auth.js';
+import { authenticateJWT, AuthRequest, requireRoles } from '../middleware/auth.js';
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'smartbearing_jwt_secret_change_in_production';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 
+function publicUser(user: any) {
+  return {
+    id: user._id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    factoryUnits: user.factoryUnits ?? [],
+    customerName: user.customerName || undefined,
+    alertEmail: user.alertEmail,
+    alertWhatsapp: user.alertWhatsapp,
+  };
+}
+
 router.post('/register', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { name, email, password, role, alertEmail } = req.body;
+    const { name, email, password, alertEmail } = req.body;
     
     if (!name || !email || !password) {
       res.status(400).json({ success: false, error: 'Name, email, and password are required' });
@@ -26,21 +39,22 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(password, salt);
     
-    const userRole = role === 'admin' ? 'admin' : 'operator';
-    
     const newUser = new User({
       name,
       email,
       passwordHash,
-      role: userRole,
+      // Public registration creates a least-privilege worker account. Role and
+      // factory access are provisioned by an administrator after verification.
+      role: 'worker',
+      factoryUnits: [],
       // Alerts default to the account email unless a separate one is given.
       alertEmail: alertEmail ? String(alertEmail).trim() : email,
     });
     await newUser.save();
     
-    const token = jwt.sign({ id: newUser._id, email: newUser.email, role: newUser.role }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN as any });
+    const token = jwt.sign({ id: newUser._id, email: newUser.email, role: newUser.role, factoryUnits: newUser.factoryUnits, customerName: newUser.customerName }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN as any });
     
-    res.status(201).json({ success: true, data: { token, user: { id: newUser._id, name: newUser.name, email: newUser.email, role: newUser.role, alertEmail: newUser.alertEmail } } });
+    res.status(201).json({ success: true, data: { token, user: publicUser(newUser) } });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -67,9 +81,9 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
       return;
     }
     
-    const token = jwt.sign({ id: user._id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN as any });
+    const token = jwt.sign({ id: user._id, email: user.email, role: user.role, factoryUnits: user.factoryUnits, customerName: user.customerName }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN as any });
     
-    res.json({ success: true, data: { token, user: { id: user._id, name: user.name, email: user.email, role: user.role } } });
+    res.json({ success: true, data: { token, user: publicUser(user) } });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -103,6 +117,41 @@ router.patch('/me', authenticateJWT, async (req: AuthRequest, res: Response): Pr
 router.get('/me', authenticateJWT, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const user = await User.findById(req.user.id).select('-passwordHash');
+    if (!user) {
+      res.status(404).json({ success: false, error: 'User not found' });
+      return;
+    }
+    res.json({ success: true, data: user });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+router.get('/users', authenticateJWT, requireRoles('maintenance_engineer', 'admin'), async (_req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const users = await User.find().select('-passwordHash').sort({ createdAt: 1 }).lean();
+    res.json({ success: true, data: users });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+router.patch('/users/:id/role', authenticateJWT, requireRoles('maintenance_engineer', 'admin'), async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const allowedRoles = ['maintenance_engineer', 'admin', 'factory_manager', 'worker', 'customer', 'operator'];
+    const { role, factoryUnits, customerName } = req.body ?? {};
+    if (!allowedRoles.includes(role)) {
+      res.status(400).json({ success: false, error: 'Invalid role' });
+      return;
+    }
+    if (factoryUnits !== undefined && (!Array.isArray(factoryUnits) || factoryUnits.some((unit: unknown) => typeof unit !== 'string'))) {
+      res.status(400).json({ success: false, error: 'factoryUnits must be an array of strings' });
+      return;
+    }
+    const update: Record<string, unknown> = { role };
+    if (factoryUnits !== undefined) update.factoryUnits = [...new Set(factoryUnits)];
+    if (customerName !== undefined) update.customerName = String(customerName).trim();
+    const user = await User.findByIdAndUpdate(req.params.id, { $set: update }, { new: true }).select('-passwordHash').lean();
     if (!user) {
       res.status(404).json({ success: false, error: 'User not found' });
       return;

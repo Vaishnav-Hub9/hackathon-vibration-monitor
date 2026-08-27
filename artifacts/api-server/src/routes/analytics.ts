@@ -1,29 +1,43 @@
-import { Router, Request, Response } from 'express';
+import { Router, Response } from 'express';
 import { Machine } from '../models/Machine.js';
 import { Alert } from '../models/Alert.js';
 import { SpindleReading } from '../models/SpindleReading.js';
-import { authenticateJWT } from '../middleware/auth.js';
+import { authenticateJWT, factoryScope, hasGlobalFactoryAccess, type AuthRequest } from '../middleware/auth.js';
 
 const router = Router();
 router.use(authenticateJWT);
+
+async function accessibleMachineIds(user: AuthRequest['user']): Promise<string[] | null> {
+  if (hasGlobalFactoryAccess(user)) return null;
+  const scope = factoryScope(user);
+  return scope ? Machine.find(scope).distinct('machineId') : [];
+}
+
+function machineMatch(machineIds: string[] | null): Record<string, unknown> {
+  return machineIds === null ? {} : { machineId: { $in: machineIds } };
+}
 
 /**
  * All analytics here are computed from real stored data (readings + alerts
  * produced by the ML pipeline). No hardcoded KPIs, no Math.random().
  */
-router.get('/summary', async (req: Request, res: Response): Promise<void> => {
+router.get('/summary', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const totalMachines = await Machine.countDocuments();
-    const criticalCount = await Machine.countDocuments({ status: 'critical' });
+    const allowedMachineIds = await accessibleMachineIds(req.user);
+    const scopedMachines = machineMatch(allowedMachineIds);
+    const totalMachines = await Machine.countDocuments(scopedMachines);
+    const criticalCount = await Machine.countDocuments({ ...scopedMachines, status: 'critical' });
 
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
     const alertsToday = await Alert.countDocuments({
+      ...scopedMachines,
       detectedAt: { $gte: startOfDay }
     });
 
     // Real average health across the latest reading per spindle
     const latestReadings = await SpindleReading.aggregate([
+      ...(allowedMachineIds === null ? [] : [{ $match: scopedMachines }]),
       // Bound the scan — the latest reading per node is in the most recent 2000
       { $sort: { timestamp: -1 } },
       { $limit: 2000 },
@@ -35,7 +49,7 @@ router.get('/summary', async (req: Request, res: Response): Promise<void> => {
 
     // Real uptime: % of machines with a reading in the last 10 minutes
     const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000);
-    const machinesWithRecentReading = await SpindleReading.distinct('machineId', { timestamp: { $gte: tenMinAgo } });
+    const machinesWithRecentReading = await SpindleReading.distinct('machineId', { ...scopedMachines, timestamp: { $gte: tenMinAgo } });
     const sensorUptime = totalMachines > 0
       ? Math.round((machinesWithRecentReading.length / totalMachines) * 100)
       : 0;
@@ -55,8 +69,10 @@ router.get('/summary', async (req: Request, res: Response): Promise<void> => {
  * Math.random) — the same approach the bearing-trend endpoint uses — and are
  * flagged `projected: true` so the UI can label them honestly.
  */
-router.get('/trends', async (req: Request, res: Response): Promise<void> => {
+router.get('/trends', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    const allowedMachineIds = await accessibleMachineIds(req.user);
+    const scopedMachines = machineMatch(allowedMachineIds);
     const days = 30;
     const today = new Date();
     today.setHours(23, 59, 59, 999);
@@ -67,12 +83,12 @@ router.get('/trends', async (req: Request, res: Response): Promise<void> => {
 
     const dayKey = (d: Date) => d.toISOString().slice(0, 10);
 
-    const machines = await Machine.find().select('machineId').lean();
+    const machines = await Machine.find(scopedMachines).select('machineId').lean();
     const machineIds = machines.map((m: any) => m.machineId).filter(Boolean);
 
     const [alertAgg, readingAgg] = await Promise.all([
       Alert.aggregate([
-        { $match: { detectedAt: { $gte: start } } },
+        { $match: { ...scopedMachines, detectedAt: { $gte: start } } },
         {
           $group: {
             _id: { $dateToString: { format: '%Y-%m-%d', date: '$detectedAt' } },
@@ -95,6 +111,7 @@ router.get('/trends', async (req: Request, res: Response): Promise<void> => {
           dayEnd.setHours(23, 59, 59, 999);
           for (const mid of machineIds) {
             const latest = await SpindleReading.findOne({
+              ...scopedMachines,
               machineId: mid,
               timestamp: { $gte: dayStart, $lte: dayEnd },
             })
@@ -204,8 +221,10 @@ router.get('/trends', async (req: Request, res: Response): Promise<void> => {
  * stored alerts began get a deterministic low-intensity projection
  * (`projected: true`) so the grid renders visibly instead of nearly empty.
  */
-router.get('/heatmap', async (req: Request, res: Response): Promise<void> => {
+router.get('/heatmap', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    const machineIds = await accessibleMachineIds(req.user);
+    const scopedMachines = machineMatch(machineIds);
     const days = 28;
     const today = new Date();
     today.setHours(23, 59, 59, 999);
@@ -214,7 +233,7 @@ router.get('/heatmap', async (req: Request, res: Response): Promise<void> => {
     start.setHours(0, 0, 0, 0);
 
     const agg = await Alert.aggregate([
-      { $match: { detectedAt: { $gte: start } } },
+      { $match: { ...scopedMachines, detectedAt: { $gte: start } } },
       {
         $group: {
           _id: { $dateToString: { format: '%Y-%m-%d', date: '$detectedAt' } },
@@ -260,8 +279,10 @@ router.get('/heatmap', async (req: Request, res: Response): Promise<void> => {
  * Months before stored history began get a deterministic projection anchored
  * on the current month's real counts so the chart renders a full year.
  */
-router.get('/monthly', async (req: Request, res: Response): Promise<void> => {
+router.get('/monthly', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    const machineIds = await accessibleMachineIds(req.user);
+    const scopedMachines = machineMatch(machineIds);
     const months = 12;
     const now = new Date();
     const results = [];
@@ -271,9 +292,9 @@ router.get('/monthly', async (req: Request, res: Response): Promise<void> => {
       const next = new Date(m.getFullYear(), m.getMonth() + 1, 1);
 
       const [critical, warning, resolved] = await Promise.all([
-        Alert.countDocuments({ severity: 'critical', detectedAt: { $gte: m, $lt: next } }),
-        Alert.countDocuments({ severity: 'warning', detectedAt: { $gte: m, $lt: next } }),
-        Alert.countDocuments({ status: 'resolved', resolvedAt: { $gte: m, $lt: next } })
+        Alert.countDocuments({ ...scopedMachines, severity: 'critical', detectedAt: { $gte: m, $lt: next } }),
+        Alert.countDocuments({ ...scopedMachines, severity: 'warning', detectedAt: { $gte: m, $lt: next } }),
+        Alert.countDocuments({ ...scopedMachines, status: 'resolved', resolvedAt: { $gte: m, $lt: next } })
       ]);
       results.push({ month: monthLabel, Critical: critical, Warning: warning, Prevented: resolved, projected: false });
     }
@@ -307,10 +328,12 @@ router.get('/monthly', async (req: Request, res: Response): Promise<void> => {
 /**
  * ROI derived from real resolved alerts + maintenance logs. No random numbers.
  */
-router.get('/roi', async (req: Request, res: Response): Promise<void> => {
+router.get('/roi', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const resolvedCritical = await Alert.countDocuments({ status: 'resolved', severity: 'critical' });
-    const resolvedWarning = await Alert.countDocuments({ status: 'resolved', severity: 'warning' });
+    const machineIds = await accessibleMachineIds(req.user);
+    const scopedMachines = machineMatch(machineIds);
+    const resolvedCritical = await Alert.countDocuments({ ...scopedMachines, status: 'resolved', severity: 'critical' });
+    const resolvedWarning = await Alert.countDocuments({ ...scopedMachines, status: 'resolved', severity: 'warning' });
 
     // Cost assumptions (documented constants, not random):
     // critical failure ≈ ₹18,000 downtime+repair, warning ≈ ₹9,000
@@ -334,16 +357,25 @@ router.get('/roi', async (req: Request, res: Response): Promise<void> => {
  * seed, no Math.random) — the same regression-style projection approach the
  * RUL endpoint uses — so the chart is physically plausible and reproducible.
  */
-router.get('/bearing-trend', async (req: Request, res: Response): Promise<void> => {
+router.get('/bearing-trend', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const range = String(req.query.range || '1y');
     const machineId = req.query.machineId ? String(req.query.machineId) : null;
     const days = range === '1m' ? 30 : range === '6m' ? 180 : 365;
 
+    const allowedMachineIds = await accessibleMachineIds(req.user);
+    if (allowedMachineIds !== null && machineId && !allowedMachineIds.includes(machineId)) {
+      res.status(403).json({ success: false, error: 'You do not have access to this machine' });
+      return;
+    }
+    const scopedMachines = machineMatch(allowedMachineIds);
+    const requestedMachine = machineId ? { machineId } : {};
+
     // ---- Real anchors: latest vibration / temperature / health ----
     // Fleet mode: average across the latest reading per machine.
     const latestPerMachine = await SpindleReading.aggregate([
-      ...(machineId ? [{ $match: { machineId } }] : []),
+      ...(Object.keys(scopedMachines).length > 0 ? [{ $match: scopedMachines }] : []),
+      ...(machineId ? [{ $match: requestedMachine }] : []),
       { $sort: { timestamp: -1 } },
       { $limit: 2000 },
       { $group: {

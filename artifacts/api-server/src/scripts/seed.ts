@@ -30,10 +30,18 @@ async function seed(): Promise<void> {
     const salt = await bcrypt.genSalt(10);
     const adminHash = await bcrypt.hash('Admin@123', salt);
     const operatorHash = await bcrypt.hash('Operator@123', salt);
+    const maintenanceHash = await bcrypt.hash('Maintenance@123', salt);
+    const managerHash = await bcrypt.hash('Manager@123', salt);
+    const workerHash = await bcrypt.hash('Worker@123', salt);
+    const customerHash = await bcrypt.hash('Customer@123', salt);
 
     await User.create([
-      { name: 'Admin User', email: 'admin@smartbearing.com', passwordHash: adminHash, role: 'admin' },
-      { name: 'Operator User', email: 'operator@smartbearing.com', passwordHash: operatorHash, role: 'operator' }
+      { name: 'Admin User', email: 'admin@smartbearing.com', passwordHash: adminHash, role: 'admin', factoryUnits: ['unit-a', 'unit-b'] },
+      { name: 'Maintenance Engineer', email: 'maintenance@smartbearing.com', passwordHash: maintenanceHash, role: 'maintenance_engineer', factoryUnits: ['unit-a', 'unit-b'] },
+      { name: 'Factory Manager', email: 'manager@smartbearing.com', passwordHash: managerHash, role: 'factory_manager', factoryUnits: ['unit-a'] },
+      { name: 'Line Worker', email: 'worker@smartbearing.com', passwordHash: workerHash, role: 'worker', factoryUnits: ['unit-a'] },
+      { name: 'Mangalya Narayana', email: 'customer@mangalyanarayana.com', passwordHash: customerHash, role: 'customer', factoryUnits: ['unit-a'], customerName: 'Mangalya Narayana' },
+      { name: 'Operator User', email: 'operator@smartbearing.com', passwordHash: operatorHash, role: 'operator', factoryUnits: ['unit-a'] }
     ]);
     console.log('Seeded users');
 

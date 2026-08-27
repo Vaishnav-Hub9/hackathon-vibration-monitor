@@ -16,7 +16,8 @@ import {
   ChevronDown,
   Cpu,
   Smartphone,
-  Box
+  Box,
+  ShieldCheck,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import NotificationBell from '@/components/layout/NotificationBell';
@@ -24,6 +25,7 @@ import { getSocket } from '@/lib/socket';
 import { factoryUnitsApi } from '@/lib/api';
 import { useActiveAlertsCount } from '@/hooks/useActiveAlertsCount';
 import AmbientCanvas from '@/components/ui/AmbientCanvas';
+import { getCurrentRole, getCurrentUser, ROLE_DEFINITIONS, type AppRole } from '@/lib/roles';
 
 interface DashLayoutProps {
   children: ReactNode;
@@ -41,6 +43,9 @@ export default function DashLayout({ children }: DashLayoutProps) {
   const [factoryUnits, setFactoryUnits] = useState<any[]>([]);
   const [selectedUnit, setSelectedUnit] = useState<string>(() => localStorage.getItem('selectedFactoryUnit') || '');
   const [unitDropdownOpen, setUnitDropdownOpen] = useState(false);
+  const currentRole = getCurrentRole();
+  const currentUser = getCurrentUser();
+  const roleDefinition = ROLE_DEFINITIONS[currentRole];
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -117,19 +122,20 @@ export default function DashLayout({ children }: DashLayoutProps) {
   };
 
   const navItems = [
-    { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-    { href: '/machine/M003', icon: Activity, label: 'Machines' },
-    { href: '/predictions', icon: BarChart3, label: 'Predictions' },
+    { href: '/dashboard', icon: LayoutDashboard, label: 'Role Dashboard' },
+    { href: '/machine/M003', icon: Activity, label: 'Machines', roles: ['maintenance_engineer', 'admin', 'factory_manager', 'worker', 'operator'] as AppRole[] },
+    { href: '/fleet', icon: Boxes, label: 'Fleet Data', roles: ['maintenance_engineer', 'admin'] as AppRole[] },
+    { href: '/predictions', icon: BarChart3, label: 'Predictions', roles: ['maintenance_engineer', 'admin', 'factory_manager', 'customer'] as AppRole[] },
     { href: '/alerts', icon: AlertTriangle, label: 'Alerts', badge: activeAlerts },
-    { href: '/analytics', icon: BarChart3, label: 'Analytics' },
-    { href: '/ml-analysis', icon: BrainCircuit, label: 'ML Analysis' },
-    { href: '/twin', icon: Boxes, label: 'Digital Twin' },
-    { href: '/twin/bench', icon: Box, label: '3D Digital Twin' },
-    { href: '/workflow', icon: Workflow, label: 'Pipeline' },
-    { href: '/hardware', icon: CircuitBoard, label: 'Hardware Lab' },
-    { href: '/capture', icon: Smartphone, label: 'Acoustic Capture', external: true },
-    { href: '/settings', icon: SettingsIcon, label: 'Settings' },
-  ];
+    { href: '/analytics', icon: BarChart3, label: 'Analytics', roles: ['maintenance_engineer', 'admin', 'factory_manager', 'customer'] as AppRole[] },
+    { href: '/ml-analysis', icon: BrainCircuit, label: 'ML Analysis', roles: ['maintenance_engineer', 'admin', 'factory_manager'] as AppRole[] },
+    { href: '/twin', icon: Boxes, label: 'Digital Twin', roles: ['maintenance_engineer', 'admin', 'factory_manager', 'worker', 'operator'] as AppRole[] },
+    { href: '/twin/bench', icon: Box, label: '3D Digital Twin', roles: ['maintenance_engineer', 'admin', 'factory_manager', 'worker', 'operator'] as AppRole[] },
+    { href: '/workflow', icon: Workflow, label: 'Pipeline', roles: ['maintenance_engineer', 'admin', 'factory_manager'] as AppRole[] },
+    { href: '/hardware', icon: CircuitBoard, label: 'Hardware Lab', roles: ['maintenance_engineer', 'admin', 'factory_manager', 'worker', 'operator'] as AppRole[] },
+    { href: '/capture', icon: Smartphone, label: 'Acoustic Capture', external: true, roles: ['maintenance_engineer', 'worker', 'operator'] as AppRole[] },
+    { href: '/settings', icon: SettingsIcon, label: 'Settings', roles: ['maintenance_engineer', 'admin'] as AppRole[] },
+  ].filter((item) => !item.roles || item.roles.includes(currentRole));
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row font-sans">
@@ -274,6 +280,13 @@ export default function DashLayout({ children }: DashLayoutProps) {
                   </div>
                 </>
               )}
+            </div>
+            <div className="hidden lg:flex items-center gap-2 rounded-lg border border-navy bg-[#141E35] px-3 py-1.5">
+              <ShieldCheck className="w-3.5 h-3.5" style={{ color: roleDefinition.accent }} />
+              <div className="leading-tight">
+                <div className="text-[10px] font-bold" style={{ color: roleDefinition.accent }}>{roleDefinition.shortLabel}</div>
+                <div className="text-[9px] text-slate-500">{currentUser.customerName || currentUser.name || 'Demo account'}</div>
+              </div>
             </div>
           </div>
 

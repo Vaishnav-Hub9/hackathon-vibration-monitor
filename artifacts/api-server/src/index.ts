@@ -3,12 +3,14 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import mongoose from 'mongoose';
 import { Server } from 'socket.io';
+import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
 import app from "./app.js";
 import { logger } from "./lib/logger.js";
 import { setIo } from './socket.js';
 import { sensorSimulator } from './simulator/SensorSimulator.js';
 import { hardwareSimulator } from './simulator/HardwareSimulator.js';
+import type { AuthUser } from './middleware/auth.js';
 
 dotenv.config();
 // Also load .env.local from project root (used by freebuff-env)
@@ -33,6 +35,27 @@ const io = new Server(server, {
   }
 });
 setIo(io);
+
+const JWT_SECRET = process.env.JWT_SECRET || 'smartbearing_jwt_secret_change_in_production';
+
+io.use((socket, next) => {
+  const token = socket.handshake.auth?.token;
+  if (typeof token !== 'string' || token.length === 0) {
+    next(new Error('Unauthorized'));
+    return;
+  }
+  try {
+    const user = jwt.verify(token, JWT_SECRET);
+    if (!user || typeof user === 'string' || typeof user.id !== 'string') {
+      next(new Error('Invalid session'));
+      return;
+    }
+    socket.data.user = user as AuthUser;
+    next();
+  } catch {
+    next(new Error('Invalid session'));
+  }
+});
 
 io.on('connection', (socket) => {
   logger.info({ socketId: socket.id }, 'New client connected');

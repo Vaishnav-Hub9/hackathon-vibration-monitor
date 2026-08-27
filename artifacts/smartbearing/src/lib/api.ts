@@ -21,7 +21,10 @@ export const authApi = {
   login: (data: any) => api.post('/auth/login', data),
   register: (data: any) => api.post('/auth/register', data),
   me: () => api.get('/auth/me'),
-  updateMe: (data: any) => api.patch('/auth/me', data)
+  updateMe: (data: any) => api.patch('/auth/me', data),
+  getUsers: () => api.get('/auth/users'),
+  updateUserRole: (id: string, data: { role: string; factoryUnits?: string[]; customerName?: string }) =>
+    api.patch(`/auth/users/${id}/role`, data),
 };
 
 export const machinesApi = {

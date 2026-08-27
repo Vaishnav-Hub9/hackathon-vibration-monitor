@@ -10,6 +10,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { alertsApi, analyticsApi } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
 import LiveReadingsChart from '@/components/dashboard/LiveReadingsChart';
+import { getCurrentRole } from '@/lib/roles';
 
 type AlertStatus = 'active' | 'acknowledged' | 'resolved';
 
@@ -39,6 +40,9 @@ type Alert = {
 };
 
 export default function Alerts() {
+  const role = getCurrentRole();
+  const canManageAlerts = role === 'maintenance_engineer' || role === 'admin' || role === 'factory_manager';
+  const canOpenMachine = role !== 'customer';
   const [filter, setFilter] = useState('All');
   const [alertList, setAlertList] = useState<Alert[]>([]);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
@@ -310,7 +314,7 @@ export default function Alerts() {
 
                     {!isResolved && (
                       <div className="flex gap-2 w-full md:w-auto flex-shrink-0">
-                        {!isAcknowledged && (
+                        {canManageAlerts && !isAcknowledged && (
                           <Button
                             variant="outline"
                             size="sm"
@@ -320,7 +324,7 @@ export default function Alerts() {
                             Acknowledge
                           </Button>
                         )}
-                        {isAcknowledged && (
+                        {canManageAlerts && isAcknowledged && (
                           <Button
                             variant="outline"
                             size="sm"
@@ -330,11 +334,13 @@ export default function Alerts() {
                             <CheckCircle2 className="w-3 h-3 mr-1" /> Resolve
                           </Button>
                         )}
-                        <Link href={`/machine/${alert.machineId}`}>
-                          <Button size="sm" className="bg-[#141E35] hover:bg-amber hover:text-navy text-white transition-colors">
-                            View
-                          </Button>
-                        </Link>
+                        {canOpenMachine && (
+                          <Link href={`/machine/${alert.machineId}`}>
+                            <Button size="sm" className="bg-[#141E35] hover:bg-amber hover:text-navy text-white transition-colors">
+                              View
+                            </Button>
+                          </Link>
+                        )}
                       </div>
                     )}
 

@@ -7,21 +7,25 @@ import {
   LayoutDashboard, Activity, Bell, BarChart2, Settings,
   Cpu, ChevronRight, Search, Zap, TrendingDown, BrainCircuit, CircuitBoard
 } from 'lucide-react';
+import { getCurrentRole, type AppRole } from '@/lib/roles';
 
 const NAV_ITEMS = [
-  { label: 'Fleet Dashboard', href: '/dashboard', icon: LayoutDashboard, shortcut: 'D' },
-  { label: 'Predictions', href: '/predictions', icon: TrendingDown, shortcut: 'P' },
+  { label: 'Role Dashboard', href: '/dashboard', icon: LayoutDashboard, shortcut: 'D' },
+  { label: 'Fleet Data', href: '/fleet', icon: LayoutDashboard, shortcut: 'F', roles: ['maintenance_engineer', 'admin'] as AppRole[] },
+  { label: 'Predictions', href: '/predictions', icon: TrendingDown, shortcut: 'P', roles: ['maintenance_engineer', 'admin', 'factory_manager', 'customer'] as AppRole[] },
   { label: 'Alert Center', href: '/alerts', icon: Bell, shortcut: 'A' },
-  { label: 'Analytics & ROI', href: '/analytics', icon: BarChart2, shortcut: 'R' },
-  { label: 'ML Training Analysis', href: '/ml-analysis', icon: BrainCircuit, shortcut: 'M' },
-  { label: 'Hardware Lab', href: '/hardware', icon: CircuitBoard, shortcut: 'H' },
-  { label: 'Settings', href: '/settings', icon: Settings, shortcut: 'S' },
+  { label: 'Analytics & ROI', href: '/analytics', icon: BarChart2, shortcut: 'R', roles: ['maintenance_engineer', 'admin', 'factory_manager', 'customer'] as AppRole[] },
+  { label: 'ML Training Analysis', href: '/ml-analysis', icon: BrainCircuit, shortcut: 'M', roles: ['maintenance_engineer', 'admin', 'factory_manager'] as AppRole[] },
+  { label: '3D Digital Twin', href: '/twin/bench', icon: CircuitBoard, shortcut: 'T', roles: ['maintenance_engineer', 'admin', 'factory_manager', 'worker', 'operator'] as AppRole[] },
+  { label: 'Hardware Lab', href: '/hardware', icon: CircuitBoard, shortcut: 'H', roles: ['maintenance_engineer', 'admin', 'factory_manager', 'worker', 'operator'] as AppRole[] },
+  { label: 'Settings', href: '/settings', icon: Settings, shortcut: 'S', roles: ['maintenance_engineer', 'admin'] as AppRole[] },
 ];
 
 export default function CommandPalette() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [, navigate] = useLocation();
+  const currentRole = getCurrentRole();
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -41,19 +45,20 @@ export default function CommandPalette() {
     setQuery('');
   }
 
-  const filteredMachines = machines.filter(m =>
+  const filteredMachines = currentRole === 'customer' ? [] : machines.filter(m =>
     query === '' ||
     m.name.toLowerCase().includes(query.toLowerCase()) ||
     m.id.toLowerCase().includes(query.toLowerCase())
   );
 
   const filteredNav = NAV_ITEMS.filter(n =>
-    query === '' || n.label.toLowerCase().includes(query.toLowerCase())
+    (!n.roles || n.roles.includes(currentRole)) &&
+    (query === '' || n.label.toLowerCase().includes(query.toLowerCase()))
   );
 
   // Only show search trigger on dashboard pages (not landing/login/register)
   const path = window.location.pathname;
-  const isDashboardPage = ['/dashboard','/machine','/predictions','/alerts','/analytics','/ml-analysis','/twin','/workflow','/hardware','/settings'].some(p => path.startsWith(p));
+  const isDashboardPage = ['/dashboard','/fleet','/machine','/predictions','/alerts','/analytics','/ml-analysis','/twin','/workflow','/hardware','/settings'].some(p => path.startsWith(p));
 
   return (
     <>

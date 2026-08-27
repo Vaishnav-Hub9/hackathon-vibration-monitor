@@ -8,6 +8,7 @@ import BearingExploded from "@/pages/BearingExploded";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
 import Dashboard from "@/pages/Dashboard";
+import RoleDashboard from "@/pages/RoleDashboard";
 import MachineDetail from "@/pages/MachineDetail";
 import Predictions from "@/pages/Predictions";
 import Alerts from "@/pages/Alerts";
@@ -21,12 +22,20 @@ import Workflow from "@/pages/Workflow";
 import NotFound from "@/pages/not-found";
 import { useEffect, type ComponentType } from "react";
 import CursorGlow from "@/components/ui/CursorGlow";
+import { getCurrentRole, type AppRole } from "@/lib/roles";
 
 const queryClient = new QueryClient();
 
 function ProtectedRoute({ component: Component }: { component: ComponentType }) {
   const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true';
   if (!isLoggedIn) return <Redirect to="/login" />;
+  return <Component />;
+}
+
+function RoleProtectedRoute({ component: Component, roles }: { component: ComponentType; roles: AppRole[] }) {
+  const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true';
+  if (!isLoggedIn) return <Redirect to="/login" />;
+  if (!roles.includes(getCurrentRole())) return <Redirect to="/dashboard" />;
   return <Component />;
 }
 
@@ -43,19 +52,20 @@ function Router() {
     <Switch>
       <Route path="/" component={Landing} />
       <Route path="/bearing/exploded" component={BearingExploded} />
-      <Route path="/twin" component={DigitalTwin} />
-      <Route path="/twin/bench" component={DigitalTwinBench} />
-      <Route path="/workflow" component={Workflow} />
+       <Route path="/twin" component={() => <RoleProtectedRoute component={DigitalTwin} roles={['maintenance_engineer', 'admin', 'factory_manager', 'worker', 'operator']} />} />
+       <Route path="/twin/bench" component={() => <RoleProtectedRoute component={DigitalTwinBench} roles={['maintenance_engineer', 'admin', 'factory_manager', 'worker', 'operator']} />} />
+       <Route path="/workflow" component={() => <RoleProtectedRoute component={Workflow} roles={['maintenance_engineer', 'admin', 'factory_manager']} />} />
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />
-      <Route path="/dashboard" component={Dashboard} />
-      <Route path="/machine/:id" component={() => <ProtectedRoute component={MachineDetail} />} />
-      <Route path="/predictions" component={() => <ProtectedRoute component={Predictions} />} />
-      <Route path="/alerts" component={() => <ProtectedRoute component={Alerts} />} />
-      <Route path="/analytics" component={() => <ProtectedRoute component={Analytics} />} />
-      <Route path="/ml-analysis" component={() => <ProtectedRoute component={MlAnalysis} />} />
-      <Route path="/hardware" component={() => <ProtectedRoute component={HardwareLab} />} />
-      <Route path="/settings" component={() => <ProtectedRoute component={Settings} />} />
+       <Route path="/dashboard" component={() => <ProtectedRoute component={RoleDashboard} />} />
+       <Route path="/fleet" component={() => <RoleProtectedRoute component={Dashboard} roles={['maintenance_engineer', 'admin']} />} />
+       <Route path="/machine/:id" component={() => <RoleProtectedRoute component={MachineDetail} roles={['maintenance_engineer', 'admin', 'factory_manager', 'worker', 'operator']} />} />
+       <Route path="/predictions" component={() => <RoleProtectedRoute component={Predictions} roles={['maintenance_engineer', 'admin', 'factory_manager', 'customer']} />} />
+       <Route path="/alerts" component={() => <RoleProtectedRoute component={Alerts} roles={['maintenance_engineer', 'admin', 'factory_manager', 'worker', 'operator', 'customer']} />} />
+       <Route path="/analytics" component={() => <RoleProtectedRoute component={Analytics} roles={['maintenance_engineer', 'admin', 'factory_manager', 'customer']} />} />
+       <Route path="/ml-analysis" component={() => <RoleProtectedRoute component={MlAnalysis} roles={['maintenance_engineer', 'admin', 'factory_manager']} />} />
+       <Route path="/hardware" component={() => <RoleProtectedRoute component={HardwareLab} roles={['maintenance_engineer', 'admin', 'factory_manager', 'worker', 'operator']} />} />
+       <Route path="/settings" component={() => <RoleProtectedRoute component={Settings} roles={['maintenance_engineer', 'admin']} />} />
       <Route component={NotFound} />
     </Switch>
   );

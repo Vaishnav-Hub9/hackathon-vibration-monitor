@@ -1,6 +1,6 @@
-import { Router, Request, Response } from 'express';
+import { Router, Response } from 'express';
 import { Alert } from '../models/Alert.js';
-import { authenticateJWT, type AuthRequest } from '../middleware/auth.js';
+import { authenticateJWT, factoryScope, hasGlobalFactoryAccess, requireRoles, type AuthRequest } from '../middleware/auth.js';
 import { Machine } from '../models/Machine.js';
 import { notifyMailAlert, isMailConfigured, type MailAlertPayload } from '../lib/mail.js';
 import { isWhatsAppConfigured, sendWhatsAppMessage } from '../lib/whatsapp.js';
@@ -9,9 +9,17 @@ import { User } from '../models/User.js';
 const router = Router();
 router.use(authenticateJWT);
 
+async function canAccessAlert(id: string, user: AuthRequest['user']): Promise<boolean> {
+  if (hasGlobalFactoryAccess(user)) return true;
+  const alert = await Alert.findById(id).select('machineId').lean();
+  const scope = factoryScope(user);
+  if (!alert || !scope) return false;
+  return Boolean(await Machine.exists({ ...scope, machineId: alert.machineId }));
+}
+
 // Fire a sample warning email immediately to every configured recipient —
 // used by Settings -> Notifications -> "Send Test Alert Email" for demos.
-router.post('/test-email', async (req: AuthRequest, res: Response): Promise<void> => {
+router.post('/test-email', requireRoles('maintenance_engineer', 'admin', 'factory_manager'), async (req: AuthRequest, res: Response): Promise<void> => {
   const user = await User.findById(req.user.id).select('email alertEmail');
   const to = user?.alertEmail || user?.email || '';
 
@@ -74,7 +82,7 @@ router.post('/test-email', async (req: AuthRequest, res: Response): Promise<void
 
 // Fire a sample WhatsApp alert to the signed-in user's saved number —
 // used by Settings -> Notifications -> "Send Test WhatsApp".
-router.post('/test-whatsapp', async (req: AuthRequest, res: Response): Promise<void> => {
+router.post('/test-whatsapp', requireRoles('maintenance_engineer', 'admin', 'factory_manager'), async (req: AuthRequest, res: Response): Promise<void> => {
   if (!isWhatsAppConfigured()) {
     res.status(503).json({
       success: false,
@@ -106,12 +114,22 @@ router.post('/test-whatsapp', async (req: AuthRequest, res: Response): Promise<v
   res.json({ success: true, data: { sentTo: to } });
 });
 
-router.get('/', async (req: Request, res: Response): Promise<void> => {
+router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { status, machineId } = req.query;
     const query: any = {};
     if (status) query.status = status;
     if (machineId) query.machineId = machineId;
+
+    if (!hasGlobalFactoryAccess(req.user)) {
+      const scope = factoryScope(req.user);
+      const accessibleMachineIds = scope ? await Machine.find(scope).distinct('machineId') : [];
+      if (machineId && !accessibleMachineIds.includes(String(machineId))) {
+        res.status(403).json({ success: false, error: 'You do not have access to this machine' });
+        return;
+      }
+      query.machineId = machineId ? String(machineId) : { $in: accessibleMachineIds };
+    }
     
     const alerts = await Alert.find(query).sort({ detectedAt: -1 }).lean();
     
@@ -143,9 +161,15 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
-router.get('/export/csv', async (req: Request, res: Response): Promise<void> => {
+router.get('/export/csv', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const alerts = await Alert.find().sort({ detectedAt: -1 }).lean();
+    const query: Record<string, unknown> = {};
+    if (!hasGlobalFactoryAccess(req.user)) {
+      const scope = factoryScope(req.user);
+      const accessibleMachineIds = scope ? await Machine.find(scope).distinct('machineId') : [];
+      query.machineId = { $in: accessibleMachineIds };
+    }
+    const alerts = await Alert.find(query).sort({ detectedAt: -1 }).lean();
     
     const headers = ['machineId', 'spindleId', 'severity', 'type', 'message', 'status', 'detectedAt'].join(',');
     const rows = alerts.map(a => `${a.machineId},${a.spindleId},${a.severity},${a.type},"${a.message.replace(/"/g, '""')}",${a.status},${a.detectedAt.toISOString()}`).join('\n');
@@ -159,12 +183,20 @@ router.get('/export/csv', async (req: Request, res: Response): Promise<void> => 
   }
 });
 
-router.get('/:id', async (req: Request, res: Response): Promise<void> => {
+router.get('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const alert = await Alert.findById(req.params.id).lean();
     if (!alert) {
       res.status(404).json({ success: false, error: 'Alert not found' });
       return;
+    }
+    if (!hasGlobalFactoryAccess(req.user)) {
+      const scope = factoryScope(req.user);
+      const machine = scope ? await Machine.findOne({ ...scope, machineId: alert.machineId }).lean() : null;
+      if (!machine) {
+        res.status(403).json({ success: false, error: 'You do not have access to this alert' });
+        return;
+      }
     }
     res.json({ success: true, data: alert });
   } catch (err: any) {
@@ -172,8 +204,12 @@ router.get('/:id', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
-router.patch('/:id/acknowledge', async (req: Request, res: Response): Promise<void> => {
+router.patch('/:id/acknowledge', requireRoles('maintenance_engineer', 'admin', 'factory_manager'), async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    if (!(await canAccessAlert(String(req.params.id), req.user))) {
+      res.status(403).json({ success: false, error: 'You do not have access to this alert' });
+      return;
+    }
     const alert = await Alert.findByIdAndUpdate(
       req.params.id, 
       { status: 'acknowledged', acknowledgedAt: new Date() },
@@ -185,8 +221,12 @@ router.patch('/:id/acknowledge', async (req: Request, res: Response): Promise<vo
   }
 });
 
-router.patch('/:id/resolve', async (req: Request, res: Response): Promise<void> => {
+router.patch('/:id/resolve', requireRoles('maintenance_engineer', 'admin', 'factory_manager'), async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    if (!(await canAccessAlert(String(req.params.id), req.user))) {
+      res.status(403).json({ success: false, error: 'You do not have access to this alert' });
+      return;
+    }
     const alert = await Alert.findByIdAndUpdate(
       req.params.id, 
       { status: 'resolved', resolvedAt: new Date() },

@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { authenticateJWT } from '../middleware/auth.js';
+import { authenticateJWT, requireRoles } from '../middleware/auth.js';
 
 /**
  * ML training-analysis proxy: forwards to the Python FastAPI server (/analysis),
@@ -9,7 +9,7 @@ import { authenticateJWT } from '../middleware/auth.js';
 const router = Router();
 router.use(authenticateJWT);
 
-router.get('/analysis', async (req: Request, res: Response): Promise<void> => {
+router.get('/analysis', requireRoles('maintenance_engineer', 'admin', 'factory_manager'), async (req: Request, res: Response): Promise<void> => {
   const mlServerUrl = process.env.ML_SERVER_URL || 'http://127.0.0.1:8000';
   try {
     const controller = new AbortController();

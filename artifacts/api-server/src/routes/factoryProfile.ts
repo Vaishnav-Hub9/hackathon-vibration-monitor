@@ -1,10 +1,12 @@
-import { Router, Request, Response } from 'express';
+import { Router, Response } from 'express';
 import { FactoryProfile } from '../models/FactoryProfile.js';
+import { authenticateJWT, requireRoles, type AuthRequest } from '../middleware/auth.js';
 
 const router = Router();
+router.use(authenticateJWT);
 
 // GET /api/factory-profile — get the factory profile (singleton)
-router.get('/', async (_req: Request, res: Response): Promise<void> => {
+router.get('/', async (_req: AuthRequest, res: Response): Promise<void> => {
   try {
     let profile = await FactoryProfile.findOne().lean();
     if (!profile) {
@@ -22,7 +24,7 @@ router.get('/', async (_req: Request, res: Response): Promise<void> => {
 });
 
 // PUT /api/factory-profile — update the factory profile
-router.put('/', async (req: Request, res: Response): Promise<void> => {
+router.put('/', requireRoles('maintenance_engineer', 'admin', 'factory_manager'), async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { unitName, location, shiftTimings, description } = req.body;
     let profile = await FactoryProfile.findOne();

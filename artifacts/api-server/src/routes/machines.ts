@@ -1,18 +1,26 @@
-import { Router, Request, Response } from 'express';
+import { Router, Response } from 'express';
 import { Machine } from '../models/Machine.js';
 import { SpindleReading } from '../models/SpindleReading.js';
-import { authenticateJWT } from '../middleware/auth.js';
+import { authenticateJWT, factoryScope, requireRoles, type AuthRequest } from '../middleware/auth.js';
 
 const router = Router();
 router.use(authenticateJWT);
 
-router.get('/', async (req: Request, res: Response): Promise<void> => {
+async function findAccessibleMachine(machineId: string, req: AuthRequest) {
+  const scope = factoryScope(req.user);
+  if (scope === null) return null;
+  return Machine.findOne({ ...scope, machineId }).lean();
+}
+
+router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const filter: any = {};
-    if (req.query.factoryUnit) {
-      filter.factoryUnit = req.query.factoryUnit;
+    const requestedUnit = req.query.factoryUnit ? String(req.query.factoryUnit) : undefined;
+    const scope = factoryScope(req.user, requestedUnit);
+    if (scope === null) {
+      res.status(403).json({ success: false, error: 'You do not have access to this factory unit' });
+      return;
     }
-    const machines = await Machine.find(filter).lean();
+    const machines = await Machine.find(scope).lean();
     
     const machinesWithHealth = await Promise.all(machines.map(async (m) => {
       const latestReading = await SpindleReading.findOne({ machineId: m.machineId })
@@ -36,9 +44,9 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
-router.get('/:id', async (req: Request, res: Response): Promise<void> => {
+router.get('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const machine = await Machine.findOne({ machineId: req.params.id }).lean();
+    const machine = await findAccessibleMachine(String(req.params.id), req);
     if (!machine) {
       res.status(404).json({ success: false, error: 'Machine not found' });
       return;
@@ -63,10 +71,11 @@ router.get('/:id', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
-router.put('/:id', async (req: Request, res: Response): Promise<void> => {
+router.put('/:id', requireRoles('maintenance_engineer', 'admin'), async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    const scope = factoryScope(req.user);
     const machine = await Machine.findOneAndUpdate(
-      { machineId: req.params.id }, 
+      { ...(scope ?? {}), machineId: req.params.id },
       req.body, 
       { new: true }
     );
@@ -80,8 +89,13 @@ router.put('/:id', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
-router.get('/:id/spindles', async (req: Request, res: Response): Promise<void> => {
+router.get('/:id/spindles', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    const machine = await findAccessibleMachine(String(req.params.id), req);
+    if (!machine) {
+      res.status(404).json({ success: false, error: 'Machine not found' });
+      return;
+    }
     const spindles = await SpindleReading.aggregate([
       { $match: { machineId: req.params.id } },
       { $sort: { timestamp: -1 } },
@@ -116,8 +130,13 @@ router.get('/:id/spindles', async (req: Request, res: Response): Promise<void> =
   }
 });
 
-router.get('/:id/history', async (req: Request, res: Response): Promise<void> => {
+router.get('/:id/history', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    const machine = await findAccessibleMachine(String(req.params.id), req);
+    if (!machine) {
+      res.status(404).json({ success: false, error: 'Machine not found' });
+      return;
+    }
     const hours = parseInt(req.query.hours as string) || 24;
     const since = new Date(Date.now() - hours * 60 * 60 * 1000);
     
@@ -141,8 +160,13 @@ router.get('/:id/history', async (req: Request, res: Response): Promise<void> =>
   }
 });
 
-router.get('/:id/fft', async (req: Request, res: Response): Promise<void> => {
+router.get('/:id/fft', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    const machine = await findAccessibleMachine(String(req.params.id), req);
+    if (!machine) {
+      res.status(404).json({ success: false, error: 'Machine not found' });
+      return;
+    }
     const latest = await SpindleReading.findOne({ machineId: req.params.id }).sort({ timestamp: -1 }).lean();
     if (!latest || !latest.vibrationFFT) {
       res.json({ success: true, data: [] });
@@ -158,8 +182,13 @@ router.get('/:id/fft', async (req: Request, res: Response): Promise<void> => {
  * Real time-domain waveform (downsampled raw signal) stored with the latest
  * ML-processed reading. No synthetic sine waves — these are the actual samples.
  */
-router.get('/:id/waveform', async (req: Request, res: Response): Promise<void> => {
+router.get('/:id/waveform', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    const machine = await findAccessibleMachine(String(req.params.id), req);
+    if (!machine) {
+      res.status(404).json({ success: false, error: 'Machine not found' });
+      return;
+    }
     const latest = await SpindleReading.findOne({ machineId: req.params.id }).sort({ timestamp: -1 }).lean();
     if (!latest || !latest.waveform) {
       res.json({ success: true, data: [] });
@@ -182,8 +211,13 @@ router.get('/:id/waveform', async (req: Request, res: Response): Promise<void> =
  * With <2 readings (fresh DB), falls back to a conservative decay derived from
  * the latest ML confidence so the chart still renders honestly.
  */
-router.get('/:id/rul', async (req: Request, res: Response): Promise<void> => {
+router.get('/:id/rul', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    const machine = await findAccessibleMachine(String(req.params.id), req);
+    if (!machine) {
+      res.status(404).json({ success: false, error: 'Machine not found' });
+      return;
+    }
     const readings = await SpindleReading.find({ machineId: req.params.id })
       .sort({ timestamp: 1 })
       .select('healthScore timestamp mlConfidence')

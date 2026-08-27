@@ -1,13 +1,21 @@
-import { Router, Request, Response } from 'express';
+import { Router, Response } from 'express';
 import { FactoryUnit } from '../models/FactoryUnit.js';
 import { Machine } from '../models/Machine.js';
+import { authenticateJWT, hasGlobalFactoryAccess, requireRoles, type AuthRequest } from '../middleware/auth.js';
 
 const router = Router();
+router.use(authenticateJWT);
+
+function unitFilter(req: AuthRequest): Record<string, unknown> {
+  return hasGlobalFactoryAccess(req.user)
+    ? {}
+    : { unitId: { $in: req.user.factoryUnits ?? [] } };
+}
 
 // GET /api/factory-units — list all factory units with machine counts
-router.get('/', async (_req: Request, res: Response): Promise<void> => {
+router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const units = await FactoryUnit.find().sort({ createdAt: 1 }).lean();
+    const units = await FactoryUnit.find(unitFilter(req)).sort({ createdAt: 1 }).lean();
     const unitsWithCounts = await Promise.all(units.map(async (u) => {
       const machineCount = await Machine.countDocuments({ factoryUnit: u.unitId });
       return { ...u, machineCount };
@@ -19,9 +27,9 @@ router.get('/', async (_req: Request, res: Response): Promise<void> => {
 });
 
 // GET /api/factory-units/:unitId — get single unit
-router.get('/:unitId', async (req: Request, res: Response): Promise<void> => {
+router.get('/:unitId', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const unit = await FactoryUnit.findOne({ unitId: req.params.unitId }).lean();
+    const unit = await FactoryUnit.findOne({ ...unitFilter(req), unitId: req.params.unitId }).lean();
     if (!unit) {
       res.status(404).json({ success: false, error: 'Factory unit not found' });
       return;
@@ -34,7 +42,7 @@ router.get('/:unitId', async (req: Request, res: Response): Promise<void> => {
 });
 
 // POST /api/factory-units — create new factory unit
-router.post('/', async (req: Request, res: Response): Promise<void> => {
+router.post('/', requireRoles('maintenance_engineer', 'admin'), async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { unitId, name, location, description } = req.body;
     if (!unitId || !name || !location) {
@@ -54,11 +62,11 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 });
 
 // PUT /api/factory-units/:unitId — update factory unit
-router.put('/:unitId', async (req: Request, res: Response): Promise<void> => {
+router.put('/:unitId', requireRoles('maintenance_engineer', 'admin'), async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { name, location, description, isActive } = req.body;
     const unit = await FactoryUnit.findOneAndUpdate(
-      { unitId: req.params.unitId },
+      { ...unitFilter(req), unitId: req.params.unitId },
       { ...(name && { name }), ...(location && { location }), ...(description !== undefined && { description }), ...(isActive !== undefined && { isActive }) },
       { new: true }
     ).lean();
@@ -73,9 +81,9 @@ router.put('/:unitId', async (req: Request, res: Response): Promise<void> => {
 });
 
 // DELETE /api/factory-units/:unitId — delete factory unit (unlinks machines, doesn't delete them)
-router.delete('/:unitId', async (req: Request, res: Response): Promise<void> => {
+router.delete('/:unitId', requireRoles('maintenance_engineer', 'admin'), async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const unit = await FactoryUnit.findOneAndDelete({ unitId: req.params.unitId });
+    const unit = await FactoryUnit.findOneAndDelete({ ...unitFilter(req), unitId: req.params.unitId });
     if (!unit) {
       res.status(404).json({ success: false, error: 'Factory unit not found' });
       return;
@@ -89,14 +97,14 @@ router.delete('/:unitId', async (req: Request, res: Response): Promise<void> => 
 });
 
 // POST /api/factory-units/:unitId/machines — assign machines to a factory unit
-router.post('/:unitId/machines', async (req: Request, res: Response): Promise<void> => {
+router.post('/:unitId/machines', requireRoles('maintenance_engineer', 'admin'), async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { machineIds } = req.body;
     if (!Array.isArray(machineIds)) {
       res.status(400).json({ success: false, error: 'machineIds must be an array' });
       return;
     }
-    const unit = await FactoryUnit.findOne({ unitId: req.params.unitId });
+    const unit = await FactoryUnit.findOne({ ...unitFilter(req), unitId: req.params.unitId });
     if (!unit) {
       res.status(404).json({ success: false, error: 'Factory unit not found' });
       return;
