@@ -11,6 +11,7 @@ import { getCurrentRole, type AppRole } from '@/lib/roles';
 
 const NAV_ITEMS = [
   { label: 'Role Dashboard', href: '/dashboard', icon: LayoutDashboard, shortcut: 'D' },
+  { label: 'Operations Intelligence', href: '/operations', icon: Activity, shortcut: 'O', roles: ['maintenance_engineer', 'admin', 'factory_manager', 'worker', 'operator', 'customer'] as AppRole[] },
   { label: 'Fleet Data', href: '/fleet', icon: LayoutDashboard, shortcut: 'F', roles: ['maintenance_engineer', 'admin'] as AppRole[] },
   { label: 'Predictions', href: '/predictions', icon: TrendingDown, shortcut: 'P', roles: ['maintenance_engineer', 'admin', 'factory_manager', 'customer'] as AppRole[] },
   { label: 'Alert Center', href: '/alerts', icon: Bell, shortcut: 'A' },
@@ -58,7 +59,7 @@ export default function CommandPalette() {
 
   // Only show search trigger on dashboard pages (not landing/login/register)
   const path = window.location.pathname;
-  const isDashboardPage = ['/dashboard','/fleet','/machine','/predictions','/alerts','/analytics','/ml-analysis','/twin','/workflow','/hardware','/settings'].some(p => path.startsWith(p));
+  const isDashboardPage = ['/dashboard','/operations','/fleet','/machine','/predictions','/alerts','/analytics','/ml-analysis','/twin','/workflow','/hardware','/settings'].some(p => path.startsWith(p));
 
   return (
     <>

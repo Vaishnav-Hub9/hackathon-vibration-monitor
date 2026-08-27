@@ -19,6 +19,7 @@ import Settings from "@/pages/Settings";
 import DigitalTwin from "@/pages/DigitalTwin";
 import DigitalTwinBench from "@/pages/DigitalTwinBench";
 import Workflow from "@/pages/Workflow";
+import Operations from "@/pages/Operations";
 import NotFound from "@/pages/not-found";
 import { useEffect, type ComponentType } from "react";
 import CursorGlow from "@/components/ui/CursorGlow";
@@ -55,6 +56,7 @@ function Router() {
        <Route path="/twin" component={() => <RoleProtectedRoute component={DigitalTwin} roles={['maintenance_engineer', 'admin', 'factory_manager', 'worker', 'operator']} />} />
        <Route path="/twin/bench" component={() => <RoleProtectedRoute component={DigitalTwinBench} roles={['maintenance_engineer', 'admin', 'factory_manager', 'worker', 'operator']} />} />
        <Route path="/workflow" component={() => <RoleProtectedRoute component={Workflow} roles={['maintenance_engineer', 'admin', 'factory_manager']} />} />
+       <Route path="/operations" component={() => <RoleProtectedRoute component={Operations} roles={['maintenance_engineer', 'admin', 'factory_manager', 'worker', 'operator', 'customer']} />} />
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />
        <Route path="/dashboard" component={() => <ProtectedRoute component={RoleDashboard} />} />

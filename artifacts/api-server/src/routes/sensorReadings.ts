@@ -9,6 +9,7 @@ import { getPreventionTips } from "../lib/prevention.js";
 import { notifyMailAlert } from "../lib/mail.js";
 import { notifyWhatsAppAlert, isWhatsAppConfigured } from "../lib/whatsapp.js";
 import { User } from "../models/User.js";
+import { ensureIncidentForAlert } from "./operations.js";
 
 const router = Router();
 
@@ -394,6 +395,7 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
           ...(evidence ? { evidence } : {}),
         });
         await newAlert.save();
+        void ensureIncidentForAlert(newAlert, machine);
 
         void notifyMailAlert({
           machineId,

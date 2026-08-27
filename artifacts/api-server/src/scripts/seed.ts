@@ -9,6 +9,20 @@ import { MaintenanceLog } from '../models/MaintenanceLog.js';
 import { computeFFTBins } from '../lib/fft.js';
 import { getPreventionTips } from '../lib/prevention.js';
 import { defectFrequencies } from '../simulator/SensorSimulator.js';
+import {
+  BusinessImpact,
+  Comment,
+  CorrectiveAction,
+  DemandPlan,
+  Escalation,
+  Evidence,
+  Incident,
+  Material,
+  ProductionOrder,
+  ProductionRun,
+  QualityInspection,
+  WorkforceAssignment,
+} from '../models/Operations.js';
 
 dotenv.config();
 
@@ -24,6 +38,20 @@ async function seed(): Promise<void> {
     await SpindleReading.deleteMany({});
     await Alert.deleteMany({});
     await MaintenanceLog.deleteMany({});
+    await Promise.all([
+      ProductionOrder.deleteMany({}),
+      ProductionRun.deleteMany({}),
+      Material.deleteMany({}),
+      QualityInspection.deleteMany({}),
+      WorkforceAssignment.deleteMany({}),
+      DemandPlan.deleteMany({}),
+      Incident.deleteMany({}),
+      CorrectiveAction.deleteMany({}),
+      BusinessImpact.deleteMany({}),
+      Comment.deleteMany({}),
+      Evidence.deleteMany({}),
+      Escalation.deleteMany({}),
+    ]);
 
     console.log('Cleared collections');
 
@@ -166,6 +194,59 @@ async function seed(): Promise<void> {
       { machineId: 'M006', type: 'Inspection', technicianName: 'John Doe', notes: 'Scheduled replacement next month', bearingReplaced: false, cost: 120 }
     ]);
     console.log('Seeded maintenance logs');
+
+    const now = Date.now();
+    await ProductionOrder.create([
+      { orderNo: 'ORD-MN-2401', customerName: 'Mangalya Narayana', product: 'Premium cotton yarn 40s', quantity: 1200, unitValue: 520, dueDate: new Date(now + 36 * 60 * 60_000), priority: 'urgent', status: 'at_risk', factoryUnit: 'unit-a' },
+      { orderNo: 'ORD-MN-2402', customerName: 'Mangalya Narayana', product: 'Core cotton yarn 30s', quantity: 1800, unitValue: 390, dueDate: new Date(now + 96 * 60 * 60_000), priority: 'high', status: 'in_progress', factoryUnit: 'unit-a' },
+      { orderNo: 'ORD-AR-2403', customerName: 'Aruna Apparel Co.', product: 'Ring-spun cotton 24s', quantity: 900, unitValue: 310, dueDate: new Date(now + 120 * 60 * 60_000), priority: 'standard', status: 'in_progress', factoryUnit: 'unit-b' },
+    ]);
+    await ProductionRun.create([
+      { runNo: 'RUN-A-M003', orderId: 'ORD-MN-2401', machineId: 'M003', lineName: 'Ring Frame #3', plannedQuantity: 1200, producedQuantity: 620, goodQuantity: 608, scrapQuantity: 12, runtimeHours: 19.5, downtimeHours: 4.2, laborCost: 3800, overtimeCost: 960, status: 'at_risk', factoryUnit: 'unit-a' },
+      { runNo: 'RUN-A-M002', orderId: 'ORD-MN-2402', machineId: 'M002', lineName: 'Ring Frame #2', plannedQuantity: 1800, producedQuantity: 960, goodQuantity: 946, scrapQuantity: 14, runtimeHours: 23, downtimeHours: 1.4, laborCost: 4200, overtimeCost: 420, status: 'running', factoryUnit: 'unit-a' },
+      { runNo: 'RUN-B-M006', orderId: 'ORD-AR-2403', machineId: 'M006', lineName: 'Ring Frame #5', plannedQuantity: 900, producedQuantity: 470, goodQuantity: 465, scrapQuantity: 5, runtimeHours: 21, downtimeHours: 1.1, laborCost: 2900, overtimeCost: 0, status: 'running', factoryUnit: 'unit-b' },
+    ]);
+    await Material.create([
+      { sku: 'BRG-6205', name: '6205 replacement bearing kit', lot: 'B-6205-17', quantityOnHand: 2, reservedQuantity: 2, requiredQuantity: 3, reorderPoint: 4, supplier: 'South India Bearings', leadTimeDays: 2, requiredBy: new Date(now + 18 * 60 * 60_000), status: 'shortage', factoryUnit: 'unit-a' },
+      { sku: 'COT-RAW-01', name: 'Combed cotton bale', lot: 'C-2408-04', quantityOnHand: 4800, reservedQuantity: 3400, requiredQuantity: 4200, reorderPoint: 1000, supplier: 'Deccan Fibres', leadTimeDays: 1, requiredBy: new Date(now + 48 * 60 * 60_000), status: 'reserved', factoryUnit: 'unit-a' },
+      { sku: 'BRG-6205', name: '6205 replacement bearing kit', lot: 'B-6205-18', quantityOnHand: 5, reservedQuantity: 1, requiredQuantity: 1, reorderPoint: 2, supplier: 'South India Bearings', leadTimeDays: 2, requiredBy: new Date(now + 120 * 60 * 60_000), status: 'available', factoryUnit: 'unit-b' },
+    ]);
+    await QualityInspection.create([
+      { inspectionNo: 'QI-2408-01', orderId: 'ORD-MN-2401', runId: 'RUN-A-M003', machineId: 'M003', factoryUnit: 'unit-a', result: 'fail', inspectedQuantity: 620, defectRate: 0.018, defectCodes: ['uneven-twist', 'hairiness'], notes: 'Deviation started after vibration increase.', holdStatus: 'on_hold', scrapCost: 6240 },
+      { inspectionNo: 'QI-2408-02', orderId: 'ORD-MN-2402', runId: 'RUN-A-M002', machineId: 'M002', factoryUnit: 'unit-a', result: 'watch', inspectedQuantity: 960, defectRate: 0.009, defectCodes: ['count-variation'], notes: 'Increase sampling until balancing is complete.', holdStatus: 'rework', scrapCost: 2730 },
+      { inspectionNo: 'QI-2408-03', orderId: 'ORD-AR-2403', runId: 'RUN-B-M006', machineId: 'M006', factoryUnit: 'unit-b', result: 'pass', inspectedQuantity: 470, defectRate: 0.003, defectCodes: [], notes: 'Within customer specification.', holdStatus: 'released', scrapCost: 465 },
+    ]);
+    await WorkforceAssignment.create([
+      { assignmentNo: 'WA-2408-01', userId: 'maintenance@smartbearing.com', assigneeName: 'Maintenance Engineer', role: 'maintenance_engineer', shift: 'B · 14:00-22:00', skill: 'Bearing diagnostics', workItemId: 'M003', availability: 'available', status: 'assigned', factoryUnit: 'unit-a' },
+      { assignmentNo: 'WA-2408-02', userId: 'worker@smartbearing.com', assigneeName: 'Line Worker', role: 'worker', shift: 'B · 14:00-22:00', skill: 'Quality inspection', workItemId: 'INC-1001', availability: 'partial', status: 'assigned', factoryUnit: 'unit-a' },
+      { assignmentNo: 'WA-2408-03', userId: 'worker@smartbearing.com', assigneeName: 'Line Worker', role: 'worker', shift: 'C · 22:00-06:00', skill: 'Material staging', workItemId: 'MAT-BRG-6205', availability: 'unavailable', status: 'planned', factoryUnit: 'unit-a' },
+    ]);
+    await DemandPlan.create([
+      { planNo: 'DP-2408-MN', customerName: 'Mangalya Narayana', product: 'Premium cotton yarn 40s', forecastQuantity: 1500, horizon: 'Next 7 days', priority: 'urgent', scenario: 'customer-priority-change', confidence: 0.91, factoryUnit: 'unit-a' },
+      { planNo: 'DP-2408-AR', customerName: 'Aruna Apparel Co.', product: 'Ring-spun cotton 24s', forecastQuantity: 900, horizon: 'Next 14 days', priority: 'standard', scenario: 'baseline', confidence: 0.84, factoryUnit: 'unit-b' },
+    ]);
+
+    const incidents = await Incident.create([
+      { incidentNo: 'INC-1001', alertId: 'seed-alert-m003', category: 'machine_downtime', severity: 'critical', title: 'Ring Frame #3 bearing failure risk', description: 'BPFO energy and RMS acceleration are rising together; production quality is already drifting.', factoryUnit: 'unit-a', machineId: 'M003', orderId: 'ORD-MN-2401', status: 'action_required', stage: 'correct', ownerUserId: 'maintenance@smartbearing.com', ownerName: 'Maintenance Engineer', ownerTeam: 'Reliability', dueAt: new Date(now + 10 * 60 * 60_000), responseSlaMinutes: 30, resolutionSlaMinutes: 720, firstResponseAt: new Date(now - 2 * 60 * 60_000), impactScore: 87, createdBy: 'system-seed' },
+      { incidentNo: 'INC-1002', category: 'material_delay', severity: 'high', title: '6205 bearing kit shortage', description: 'Two kits are reserved but three are required to cover the current risk window.', factoryUnit: 'unit-a', machineId: 'M003', orderId: 'ORD-MN-2401', status: 'investigating', stage: 'investigate', ownerUserId: 'manager@smartbearing.com', ownerName: 'Factory Manager', ownerTeam: 'Materials', dueAt: new Date(now + 18 * 60 * 60_000), responseSlaMinutes: 120, resolutionSlaMinutes: 1440, impactScore: 72, createdBy: 'system-seed' },
+      { incidentNo: 'INC-1003', category: 'quality_deviation', severity: 'medium', title: 'Uneven twist on premium yarn lot', description: 'Inspection deviation correlates with the M003 vibration event; lot remains on hold.', factoryUnit: 'unit-a', machineId: 'M003', orderId: 'ORD-MN-2401', status: 'triaged', stage: 'triage', ownerUserId: 'manager@smartbearing.com', ownerName: 'Factory Manager', ownerTeam: 'Quality', dueAt: new Date(now + 6 * 60 * 60_000), responseSlaMinutes: 60, resolutionSlaMinutes: 960, impactScore: 64, createdBy: 'system-seed' },
+    ]);
+    await CorrectiveAction.create([
+      { incidentId: String(incidents[0]._id), title: 'Replace bearing and inspect housing', description: 'Stage kit, lock out M003, replace bearing, then capture post-fix vibration and temperature.', ownerUserId: 'maintenance@smartbearing.com', ownerName: 'Maintenance Engineer', dueAt: new Date(now + 8 * 60 * 60_000), status: 'in_progress', createdBy: 'system-seed' },
+      { incidentId: String(incidents[0]._id), title: 'Hold and re-test affected yarn lot', description: 'Run quality sampling after the mechanical fix before releasing the order.', ownerUserId: 'worker@smartbearing.com', ownerName: 'Line Worker', dueAt: new Date(now + 14 * 60 * 60_000), status: 'open', createdBy: 'system-seed' },
+    ]);
+    await BusinessImpact.create([
+      { incidentId: String(incidents[0]._id), orderId: 'ORD-MN-2401', factoryUnit: 'unit-a', productionValuePerUnit: 520, unitsAtRisk: 572, orderUrgency: 5, deliveryHoursRemaining: 36, materialAvailability: 0.67, qualityLossRate: 0.018, laborCost: 3800, scrapCost: 6240, downtimeHours: 4.2, productionValueAtRisk: 297440, estimatedLoss: 46465, deliveryRisk: 87, confidence: 0.89, calculationVersion: 'v1-live-inputs' },
+      { incidentId: String(incidents[1]._id), orderId: 'ORD-MN-2401', factoryUnit: 'unit-a', productionValuePerUnit: 520, unitsAtRisk: 572, orderUrgency: 5, deliveryHoursRemaining: 36, materialAvailability: 0.67, qualityLossRate: 0, laborCost: 0, scrapCost: 0, downtimeHours: 0, productionValueAtRisk: 297440, estimatedLoss: 8923, deliveryRisk: 72, confidence: 0.74, calculationVersion: 'v1-live-inputs' },
+    ]);
+    await Comment.create([
+      { entityType: 'incident', entityId: String(incidents[0]._id), factoryUnit: 'unit-a', authorId: 'maintenance@smartbearing.com', authorName: 'Maintenance Engineer', body: 'BPFO signature confirmed against the bearing reference. Replacement kit should be staged before lockout.', visibility: 'internal' },
+      { entityType: 'incident', entityId: String(incidents[0]._id), factoryUnit: 'unit-a', authorId: 'manager@smartbearing.com', authorName: 'Factory Manager', body: 'Customer delivery remains protected if the repair is completed in the next window.', visibility: 'customer' },
+    ]);
+    await Evidence.create([
+      { entityType: 'incident', entityId: String(incidents[0]._id), factoryUnit: 'unit-a', fileName: 'M003-spectrum.png', mimeType: 'image/png', size: 184320, storageRef: 'demo://evidence/M003-spectrum.png', capturedBy: 'maintenance@smartbearing.com', notes: 'BPFO peak captured during triage.' },
+    ]);
+    console.log('Seeded operations intelligence data');
 
     console.log('Seeding completed successfully');
     process.exit(0);

@@ -96,3 +96,21 @@ export const factoryUnitsApi = {
   assignMachines: (unitId: string, machineIds: string[]) =>
     api.post(`/factory-units/${unitId}/machines`, { machineIds }),
 };
+
+export const operationsApi = {
+  overview: () => api.get('/operations/overview'),
+  getIncidents: (params?: { status?: string; category?: string; factoryUnit?: string }) => api.get('/operations/incidents', { params }),
+  createIncident: (data: any) => api.post('/operations/incidents', data),
+  updateIncident: (id: string, data: any) => api.patch(`/operations/incidents/${id}`, data),
+  assignIncident: (id: string, data: { ownerUserId: string; ownerName: string; ownerTeam: string }) => api.post(`/operations/incidents/${id}/assign`, data),
+  createAction: (id: string, data: any) => api.post(`/operations/incidents/${id}/actions`, data),
+  getActivity: (id: string) => api.get(`/operations/incidents/${id}/activity`),
+  addComment: (id: string, body: string, visibility: 'internal' | 'customer' = 'internal') => api.post(`/operations/incidents/${id}/comments`, { body, visibility }),
+  addEvidence: (id: string, data: any) => api.post(`/operations/incidents/${id}/evidence`, data),
+  escalate: (id: string, data?: { reason?: string; toRole?: string; toUserId?: string }) => api.post(`/operations/incidents/${id}/escalate`, data),
+  resolve: (id: string, data: { rootCause: string; recoveryEvidence?: string }) => api.post(`/operations/incidents/${id}/resolve`, data),
+  verifyRecovery: (id: string, data: { recovered: boolean; evidence?: string }) => api.post(`/operations/incidents/${id}/verify-recovery`, data),
+  calculateImpact: (id: string, data: any) => api.post(`/operations/incidents/${id}/impact`, data),
+  getBusinessImpact: () => api.get('/operations/business-impact'),
+  getSlaBreaches: () => api.get('/operations/slas/breaches'),
+};

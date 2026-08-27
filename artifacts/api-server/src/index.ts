@@ -11,6 +11,7 @@ import { setIo } from './socket.js';
 import { sensorSimulator } from './simulator/SensorSimulator.js';
 import { hardwareSimulator } from './simulator/HardwareSimulator.js';
 import type { AuthUser } from './middleware/auth.js';
+import { escalateOverdueIncidents } from './routes/operations.js';
 
 dotenv.config();
 // Also load .env.local from project root (used by freebuff-env)
@@ -106,5 +107,8 @@ connectDB().then(() => {
     if (process.env.HARDWARE_SIMULATOR !== 'false') {
       hardwareSimulator.start();
     }
+    void escalateOverdueIncidents();
+    const escalationTimer = setInterval(() => void escalateOverdueIncidents(), 60_000);
+    escalationTimer.unref();
   });
 });

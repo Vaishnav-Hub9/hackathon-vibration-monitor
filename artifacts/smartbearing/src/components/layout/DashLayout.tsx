@@ -18,6 +18,7 @@ import {
   Smartphone,
   Box,
   ShieldCheck,
+  ClipboardCheck,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import NotificationBell from '@/components/layout/NotificationBell';
@@ -26,6 +27,7 @@ import { factoryUnitsApi } from '@/lib/api';
 import { useActiveAlertsCount } from '@/hooks/useActiveAlertsCount';
 import AmbientCanvas from '@/components/ui/AmbientCanvas';
 import { getCurrentRole, getCurrentUser, ROLE_DEFINITIONS, type AppRole } from '@/lib/roles';
+import LanguageSwitcher from '@/components/layout/LanguageSwitcher';
 
 interface DashLayoutProps {
   children: ReactNode;
@@ -123,6 +125,7 @@ export default function DashLayout({ children }: DashLayoutProps) {
 
   const navItems = [
     { href: '/dashboard', icon: LayoutDashboard, label: 'Role Dashboard' },
+    { href: '/operations', icon: ClipboardCheck, label: 'Operations', roles: ['maintenance_engineer', 'admin', 'factory_manager', 'worker', 'operator', 'customer'] as AppRole[] },
     { href: '/machine/M003', icon: Activity, label: 'Machines', roles: ['maintenance_engineer', 'admin', 'factory_manager', 'worker', 'operator'] as AppRole[] },
     { href: '/fleet', icon: Boxes, label: 'Fleet Data', roles: ['maintenance_engineer', 'admin'] as AppRole[] },
     { href: '/predictions', icon: BarChart3, label: 'Predictions', roles: ['maintenance_engineer', 'admin', 'factory_manager', 'customer'] as AppRole[] },
@@ -294,6 +297,7 @@ export default function DashLayout({ children }: DashLayoutProps) {
             <span className="text-xs text-slate-400 hidden sm:inline-block">
               Last updated: {timeAgo}s ago
             </span>
+            <LanguageSwitcher />
             <NotificationBell />
           </div>
         </header>

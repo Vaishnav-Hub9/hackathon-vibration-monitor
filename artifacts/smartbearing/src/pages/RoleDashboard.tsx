@@ -11,6 +11,7 @@ import DashLayout from '@/components/layout/DashLayout';
 import { alertsApi, analyticsApi, authApi, machinesApi } from '@/lib/api';
 import { useRealSensors } from '@/hooks/useRealSensors';
 import { getCurrentUser, normalizeRole, ROLE_DEFINITIONS, type AppRole } from '@/lib/roles';
+import { useI18n } from '@/i18n';
 
 interface RoleDashboardData {
   machines: any[];
@@ -43,7 +44,7 @@ const ROLE_COPY: Record<AppRole, { eyebrow: string; title: string; description: 
     title: 'Intervene before the line stops.',
     description: 'Prioritize machine risk, diagnose root cause, and close the loop with verified maintenance work.',
     action: 'Open maintenance queue',
-    actionHref: '/alerts',
+    actionHref: '/operations',
   },
   admin: {
     eyebrow: 'Platform governance',
@@ -57,28 +58,28 @@ const ROLE_COPY: Record<AppRole, { eyebrow: string; title: string; description: 
     title: 'See the constraints before they become delays.',
     description: 'Connect machine health to quality, people, materials, and delivery commitments across your factory.',
     action: 'Review factory risks',
-    actionHref: '/analytics',
+    actionHref: '/operations',
   },
   worker: {
     eyebrow: 'Shift action board',
     title: 'Know what needs attention next.',
     description: 'See the affected machine, the reason it was flagged, and the safest next step for your shift.',
     action: 'View assigned machines',
-    actionHref: '/machine/M003',
+    actionHref: '/operations',
   },
   operator: {
     eyebrow: 'Shift action board',
     title: 'Know what needs attention next.',
     description: 'See the affected machine, the reason it was flagged, and the safest next step for your shift.',
     action: 'View assigned machines',
-    actionHref: '/machine/M003',
+    actionHref: '/operations',
   },
   customer: {
     eyebrow: 'Partner performance report',
     title: 'Know how reliably your goods are moving.',
     description: 'Track factory efficiency, delivery confidence, quality deviations, and the value protected by early action.',
     action: 'Open performance report',
-    actionHref: '/analytics',
+    actionHref: '/operations',
   },
 };
 
@@ -261,14 +262,15 @@ function ManagerPanel({ summary, roi }: { summary: any; roi: any }) {
 }
 
 function WorkerPanel({ machines }: { machines: any[] }) {
+  const { t } = useI18n();
   const [done, setDone] = useState<string[]>([]);
-  const tasks = [{ id: 'inspect', title: 'Inspect Ring Frame #3', detail: 'Check outer race for pitting and listen for impact noise.', href: '/machine/M003' }, { id: 'stage', title: 'Stage replacement bearing kit', detail: 'Confirm kit 6205 is available before the next stop.', href: '/hardware' }, { id: 'report', title: 'Record post-fix reading', detail: 'Submit RPM and temperature after the intervention.', href: '/hardware' }];
+  const tasks = [{ id: 'inspect', title: t('inspectMachine'), detail: t('inspectMachineDetail'), href: '/machine/M003' }, { id: 'stage', title: t('stageKit'), detail: t('stageKitDetail'), href: '/hardware' }, { id: 'report', title: t('recordReading'), detail: t('recordReadingDetail'), href: '/hardware' }];
   return (
     <div className="rounded-2xl border border-navy bg-navy-card p-5">
-      <div className="mb-4 flex items-center justify-between"><div><div className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-400">My shift actions</div><h2 className="mt-1 text-base font-bold text-white">Safe, specific, and easy to complete</h2></div><HardHat className="h-5 w-5 text-emerald-400" /></div>
+      <div className="mb-4 flex items-center justify-between"><div><div className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-400">{t('shiftActions')}</div><h2 className="mt-1 text-base font-bold text-white">{t('nextAction')}</h2></div><HardHat className="h-5 w-5 text-emerald-400" /></div>
       <div className="space-y-2">{tasks.map((task, index) => { const complete = done.includes(task.id); return <div key={task.id} className={`flex items-center gap-3 rounded-xl border p-3 transition ${complete ? 'border-emerald-500/20 bg-emerald-500/[0.04]' : 'border-navy bg-[#0A0E1A]/75'}`}><button aria-label={complete ? `Mark ${task.title} incomplete` : `Mark ${task.title} complete`} onClick={() => setDone((current) => complete ? current.filter((id) => id !== task.id) : [...current, task.id])} className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border ${complete ? 'border-emerald-400/40 bg-emerald-400/15 text-emerald-400' : 'border-slate-600 text-slate-600 hover:border-emerald-400 hover:text-emerald-400'}`}>{complete ? <CheckCircle2 className="h-4 w-4" /> : <span className="font-mono-data text-[10px]">{index + 1}</span>}</button><div className="min-w-0 flex-1"><div className={`text-xs font-bold ${complete ? 'text-emerald-300 line-through' : 'text-white'}`}>{task.title}</div><div className="mt-1 text-[11px] leading-relaxed text-slate-500">{task.detail}</div></div><Link href={task.href} className="shrink-0 text-[10px] font-bold text-emerald-400 hover:text-white">Open</Link></div>; })}</div>
-      <div className="mt-4 flex items-center gap-2 rounded-lg border border-emerald-500/15 bg-emerald-500/[0.04] px-3 py-2 text-[10px] text-emerald-300"><ShieldCheck className="h-3.5 w-3.5" /> Predictions are guidance — confirm with an engineer before changing machinery.</div>
-      <div className="mt-3 text-[10px] text-slate-600">{machines.length || 3} assigned machines visible · no financial or admin controls</div>
+      <div className="mt-4 flex items-center gap-2 rounded-lg border border-emerald-500/15 bg-emerald-500/[0.04] px-3 py-2 text-[10px] text-emerald-300"><ShieldCheck className="h-3.5 w-3.5" /> {t('safeInstruction')}</div>
+      <div className="mt-3 text-[10px] text-slate-600">{machines.length || 3} assigned machines visible · {t('noFinancialControls')}</div>
     </div>
   );
 }
